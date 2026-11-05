@@ -1,0 +1,250 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────
+   Theme tokens — Light
+───────────────────────────────────────── */
+:root {
+  --background: #F8FAFC;
+  --foreground: #0F172A;
+  --card: #FFFFFF;
+  --card-foreground: #0F172A;
+  --border: #E2E8F0;
+  --input: #E2E8F0;
+  --primary: #3B82F6;
+  --primary-foreground: #FFFFFF;
+  --positive: #10B981;
+  --negative: #EF4444;
+  --muted: #64748B;
+  --muted-foreground: #94A3B8;
+  --accent: #1D4ED8;
+  --accent-foreground: #FFFFFF;
+  --ring: #3B82F6;
+  --radius: 0.75rem;
+  --sidebar-bg: #1E293B;
+  --sidebar-fg: #F1F5F9;
+  --sidebar-border: #334155;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+/* ─────────────────────────────────────────
+   Theme tokens — Dark
+───────────────────────────────────────── */
+.dark {
+  --background: #0F1629;
+  --foreground: #F1F5F9;
+  --card: #1E293B;
+  --card-foreground: #F1F5F9;
+  --border: #334155;
+  --input: #334155;
+  --primary: #3B82F6;
+  --primary-foreground: #FFFFFF;
+  --positive: #10B981;
+  --negative: #EF4444;
+  --muted: #64748B;
+  --muted-foreground: #94A3B8;
+  --accent: #1D4ED8;
+  --accent-foreground: #FFFFFF;
+  --ring: #3B82F6;
+  --sidebar-bg: #0B1120;
+  --sidebar-fg: #F1F5F9;
+  --sidebar-border: #1E293B;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5);
+}
+
+/* ─────────────────────────────────────────
+   Tailwind theme mapping
+───────────────────────────────────────── */
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-ring: var(--ring);
+
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+}
+
+/* ─────────────────────────────────────────
+   Base styles
+───────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  height: 100%;
+  margin: 0;
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: "Inter", system-ui, sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+  line-height: 1.5;
+}
+
+/* Mono font for financial numbers */
+.font-mono,
+[data-mono],
+.tabular-nums {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─────────────────────────────────────────
+   Custom scrollbars
+───────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--muted);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* ─────────────────────────────────────────
+   Focus ring
+───────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ─────────────────────────────────────────
+   Transitions for all theme-sensitive elements
+───────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-duration: 0.15s;
+  transition-timing-function: ease;
+}
+
+/* Exclude motion-sensitive elements */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* ─────────────────────────────────────────
+   Skeleton animation
+───────────────────────────────────────── */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.skeleton {
+  background-color: var(--border);
+  border-radius: 4px;
+  animation: skeleton-pulse 1.8s ease-in-out infinite;
+}
+
+/* ─────────────────────────────────────────
+   Chart tooltip
+───────────────────────────────────────── */
+.recharts-tooltip-wrapper {
+  outline: none !important;
+}
+
+/* ─────────────────────────────────────────
+   Safe area insets (PWA / notch support)
+───────────────────────────────────────── */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* ─────────────────────────────────────────
+   Gradient utilities
+───────────────────────────────────────── */
+.gradient-positive {
+  background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+}
+
+.gradient-negative {
+  background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+}
+
+.gradient-primary {
+  background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%);
+}
+
+/* ─────────────────────────────────────────
+   Card glass effect
+───────────────────────────────────────── */
+.glass {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  background-color: color-mix(in srgb, var(--card) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+/* ─────────────────────────────────────────
+   Input base styles
+───────────────────────────────────────── */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
