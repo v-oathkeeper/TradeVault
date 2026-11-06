@@ -77,6 +77,15 @@ You will run the 3 SQL migration scripts located in the `supabase/migrations/` d
   - Directional check constraints enforcing stop-loss placement rules.
   - Audit table `stop_loss_history` tracking complete trailing stop timeline and notes with RLS policies.
 
+### Migration Step 5: Trade Import Support Schema & Duplicate Detection
+- In the SQL Editor, click **New Query**.
+- Copy the entire contents of `supabase/migrations/005_trade_import_support.sql`.
+- Paste into the SQL editor and click **Run**.
+- Ensure it displays `Success. No rows returned`.
+- *This adds:*
+  - Index `idx_trades_dup_detection` for real-time open trade duplicate warning lookups.
+  - PostgreSQL stored procedure `import_trades_batch` enabling atomic all-or-nothing trade batch insertion with stop-loss history creation.
+
 ---
 
 ## 4. Provision Husband and Wife Authentication Accounts

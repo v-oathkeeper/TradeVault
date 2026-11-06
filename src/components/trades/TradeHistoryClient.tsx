@@ -14,7 +14,9 @@ import {
   Eye,
   ArrowUpRight,
   ArrowDownRight,
+  UploadCloud,
 } from 'lucide-react';
+import { ImportTradeModal } from '@/components/trades/ImportTradeModal';
 import { TradeCard } from '@/components/trades/TradeCard';
 import { Badge } from '@/components/ui/Badge';
 import { PnlDisplay } from '@/components/ui/PnlDisplay';
@@ -43,6 +45,7 @@ export function TradeHistoryClient({ initialTrades }: TradeHistoryClientProps) {
 
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // Filtered and sorted trades
   const filteredTrades = useMemo(() => {
@@ -128,13 +131,22 @@ export function TradeHistoryClient({ initialTrades }: TradeHistoryClientProps) {
         </div>
 
         {isAdmin && (
-          <Link
-            href="/trades/new"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium text-xs shadow-md shadow-blue-500/20 transition-all self-start sm:self-auto"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Record Trade</span>
-          </Link>
+          <div className="flex items-center gap-2.5 self-start sm:self-auto flex-wrap">
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-[var(--card)] hover:bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] font-semibold text-xs transition-colors shadow-sm"
+            >
+              <UploadCloud className="w-4 h-4 text-blue-500" />
+              <span>Import Trade</span>
+            </button>
+            <Link
+              href="/trades/new"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium text-xs shadow-md shadow-blue-500/20 transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Record Trade</span>
+            </Link>
+          </div>
         )}
       </div>
 
@@ -376,6 +388,15 @@ export function TradeHistoryClient({ initialTrades }: TradeHistoryClientProps) {
         isDestructive
         isLoading={isDeleting}
         onConfirm={handleDeleteTrade}
+      />
+
+      {/* Import Trade Dialog */}
+      <ImportTradeModal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={() => {
+          router.refresh();
+        }}
       />
     </div>
   );

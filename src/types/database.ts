@@ -647,6 +647,14 @@ export interface Database {
         Args: Record<PropertyKey, never>;
         Returns: string;
       };
+      import_trades_batch: {
+        Args: {
+          p_household_id: string;
+          p_user_id: string;
+          p_trades: Json;
+        };
+        Returns: Json;
+      };
     };
     Enums: {
       user_role: UserRole;
