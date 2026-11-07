@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Wallet,
   TrendingUp,
@@ -10,11 +12,14 @@ import {
   Receipt,
   Shield,
   Activity,
+  UploadCloud,
+  Plus,
 } from 'lucide-react';
 import { KPICard } from '@/components/dashboard/KPICard';
 import { PortfolioChart, type ChartDataPoint } from '@/components/charts/PortfolioChart';
 import { MonthlyBarChart } from '@/components/charts/MonthlyBarChart';
 import { RecentTradesList } from '@/components/dashboard/RecentTradesList';
+import { ImportTradeModal } from '@/components/trades/ImportTradeModal';
 import { useUser } from '@/components/providers/UserContext';
 import { formatDate, formatINR } from '@/lib/utils';
 import type { Trade, MonthlyPnl } from '@/types/app';
@@ -24,7 +29,9 @@ interface DashboardClientProps {
 }
 
 export function DashboardClient({ initialTrades }: DashboardClientProps) {
-  const { selectedPersonId, getPersonLabel, persons } = useUser();
+  const router = useRouter();
+  const { selectedPersonId, getPersonLabel, persons, isAdmin } = useUser();
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // Filter trades based on selected person
   const filteredTrades = useMemo(() => {
@@ -176,7 +183,7 @@ export function DashboardClient({ initialTrades }: DashboardClientProps) {
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
       {/* Portfolio overview header banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border)] pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border)] pb-4">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-[var(--foreground)]">
             {activeLabel} Portfolio Performance
@@ -185,6 +192,26 @@ export function DashboardClient({ initialTrades }: DashboardClientProps) {
             Real-time equity analytics, net returns, and broker expense metrics
           </p>
         </div>
+
+        {isAdmin && (
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setShowImportModal(true)}
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-[var(--card)] hover:bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] font-semibold text-xs transition-colors shadow-sm"
+            >
+              <UploadCloud className="w-4 h-4 text-blue-500" />
+              <span>Import Trade</span>
+            </button>
+            <Link
+              href="/trades/new"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium text-xs shadow-md shadow-blue-500/20 transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Record Trade</span>
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* 6 Core KPI Cards Grid */}
@@ -274,6 +301,15 @@ export function DashboardClient({ initialTrades }: DashboardClientProps) {
 
       {/* Recent Trades Section */}
       <RecentTradesList trades={filteredTrades} />
+
+      {/* Import Trade Modal */}
+      <ImportTradeModal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={() => {
+          router.refresh();
+        }}
+      />
     </div>
   );
 }

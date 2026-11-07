@@ -17,11 +17,13 @@ import {
   LogOut,
   Sun,
   Moon,
+  UploadCloud,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/components/providers/UserContext';
 import { useTheme } from 'next-themes';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { ImportTradeModal } from '@/components/trades/ImportTradeModal';
 import { toast } from 'sonner';
 
 export function MobileNav() {
@@ -31,6 +33,7 @@ export function MobileNav() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const supabase = createSupabaseBrowserClient();
 
   useEffect(() => {
@@ -170,14 +173,27 @@ export function MobileNav() {
                 <span>People</span>
               </Link>
               {isAdmin && (
-                <Link
-                  href="/exports"
-                  onClick={() => setShowMoreMenu(false)}
-                  className="flex items-center gap-3 p-3 rounded-xl bg-[var(--background)] border border-[var(--border)] text-sm font-medium"
-                >
-                  <Download className="w-4 h-4 text-emerald-500" />
-                  <span>Exports</span>
-                </Link>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMoreMenu(false);
+                      setShowImportModal(true);
+                    }}
+                    className="flex items-center gap-3 p-3 rounded-xl bg-[var(--background)] border border-[var(--border)] text-sm font-medium text-left"
+                  >
+                    <UploadCloud className="w-4 h-4 text-blue-500" />
+                    <span>Import Trade</span>
+                  </button>
+                  <Link
+                    href="/exports"
+                    onClick={() => setShowMoreMenu(false)}
+                    className="flex items-center gap-3 p-3 rounded-xl bg-[var(--background)] border border-[var(--border)] text-sm font-medium"
+                  >
+                    <Download className="w-4 h-4 text-emerald-500" />
+                    <span>Exports</span>
+                  </Link>
+                </>
               )}
               <Link
                 href="/settings"
@@ -224,6 +240,15 @@ export function MobileNav() {
           </div>
         </div>
       )}
+
+      {/* Import Trade Modal */}
+      <ImportTradeModal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={() => {
+          router.refresh();
+        }}
+      />
     </>
   );
 }

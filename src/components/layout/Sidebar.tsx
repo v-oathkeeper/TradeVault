@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -15,17 +15,20 @@ import {
   Shield,
   LogOut,
   ChevronRight,
+  UploadCloud,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import { useUser } from '@/components/providers/UserContext';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { ImportTradeModal } from '@/components/trades/ImportTradeModal';
 import { toast } from 'sonner';
 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { fullName, email, role, isAdmin } = useUser();
+  const [showImportModal, setShowImportModal] = useState(false);
   const supabase = createSupabaseBrowserClient();
 
   const handleSignOut = async () => {
@@ -97,7 +100,7 @@ export function Sidebar() {
 
       {/* Primary Action Button (Admin Only) */}
       {isAdmin && (
-        <div className="px-4 pt-4 pb-2">
+        <div className="px-4 pt-4 pb-2 space-y-2">
           <Link
             href="/trades/new"
             className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium text-sm shadow-sm transition-all active:scale-[0.98]"
@@ -105,6 +108,14 @@ export function Sidebar() {
             <PlusCircle className="w-4 h-4" />
             <span>Record Trade</span>
           </Link>
+          <button
+            type="button"
+            onClick={() => setShowImportModal(true)}
+            className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-[var(--background)] hover:bg-blue-500/10 border border-[var(--border)] hover:border-blue-500/30 text-[var(--foreground)] font-semibold text-xs shadow-sm transition-all active:scale-[0.98]"
+          >
+            <UploadCloud className="w-4 h-4 text-blue-500" />
+            <span>Import Trade</span>
+          </button>
         </div>
       )}
 
@@ -173,6 +184,15 @@ export function Sidebar() {
           </button>
         </div>
       </div>
+
+      {/* Import Trade Dialog */}
+      <ImportTradeModal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={() => {
+          router.refresh();
+        }}
+      />
     </aside>
   );
 }

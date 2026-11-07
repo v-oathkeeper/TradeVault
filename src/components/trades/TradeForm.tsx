@@ -19,6 +19,7 @@ import {
   ChevronDown,
   ChevronUp,
   Tag,
+  UploadCloud,
 } from 'lucide-react';
 import { CreateTradeSchema, type CreateTradeInput } from '@/lib/validation/schemas';
 import { useUser } from '@/components/providers/UserContext';
@@ -28,6 +29,7 @@ import { toDecimal } from '@/lib/calculations/decimal-utils';
 import { calculateInitialRisk } from '@/lib/calculations/r-multiple';
 import { formatINR, cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
+import { ImportTradeModal } from '@/components/trades/ImportTradeModal';
 import { toast } from 'sonner';
 
 interface TradeFormProps {
@@ -44,6 +46,7 @@ export function TradeForm({ brokers, initialData, isEditing = false }: TradeForm
     Boolean(initialData?.exitPrice || initialData?.exitAt)
   );
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const defaultBrokerId = brokers[0]?.id ?? '';
   const defaultPersonId = persons[0]?.id ?? '';
@@ -334,13 +337,25 @@ export function TradeForm({ brokers, initialData, isEditing = false }: TradeForm
   return (
     <div className="max-w-2xl mx-auto p-4 sm:p-6 lg:p-8">
       <div className="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-[var(--foreground)]">
-            {isEditing ? 'Edit Trade' : 'Record New Trade'}
-          </h2>
-          <p className="text-xs text-[var(--muted)]">
-            Risk-first trade logging with R-multiple tracking and automated statutory tax computation
-          </p>
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h2 className="text-xl font-bold tracking-tight text-[var(--foreground)]">
+              {isEditing ? 'Edit Trade' : 'Record New Trade'}
+            </h2>
+            <p className="text-xs text-[var(--muted)]">
+              Risk-first trade logging with R-multiple tracking and automated statutory tax computation
+            </p>
+          </div>
+          {!isEditing && (
+            <button
+              type="button"
+              onClick={() => setShowImportModal(true)}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[var(--background)] hover:bg-blue-500/10 border border-[var(--border)] hover:border-blue-500/30 text-[var(--foreground)] font-semibold text-xs transition-colors shadow-sm"
+            >
+              <UploadCloud className="w-4 h-4 text-blue-500" />
+              <span>Import from JSON</span>
+            </button>
+          )}
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
@@ -872,6 +887,16 @@ export function TradeForm({ brokers, initialData, isEditing = false }: TradeForm
           </div>
         </form>
       </div>
+
+      {/* Import Trade Modal */}
+      <ImportTradeModal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={() => {
+          router.push('/trades');
+          router.refresh();
+        }}
+      />
     </div>
   );
 }
