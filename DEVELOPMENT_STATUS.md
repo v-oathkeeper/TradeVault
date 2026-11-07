@@ -14,11 +14,12 @@
 | **Row Level Security (RLS)** | **Done** | Security definer functions (`is_admin()`, `get_my_household_id()`). Full CRUD for ADMIN, read-only for VIEWER. |
 | **Authentication & AuthZ** | **Done** | Supabase SSR cookies, middleware route guard, server-side `requireAdmin()` and `requireHouseholdMember()` barriers. |
 | **Fee Calculation Engine** | **Done** | Exact broker tariffs for Zerodha Kite and Shoonya. STT, GST (18%), exchange txn, SEBI charges, stamp duty, DP events, IPFT. Decimal.js half-up rounding. |
-| **Unit Test Suite** | **Done** | 93 Vitest unit & integration tests passing across all tariff categories, R-multiples, validation schemas, and import scenarios. |
+| **Unit Test Suite** | **Done** | 107 Vitest unit & integration tests passing across all tariff categories, R-multiples, validation schemas, import scenarios, and weekly reporting. |
 | **Design System & Shell** | **Done** | Dark/Light themes (`#0F1629` dark navy), desktop sidebar, mobile bottom bar, responsive header with login-aware person context. |
 | **Trade Entry Form** | **Done** | Instant entry for Husband (Admin) with live real-time P&L and tax calculation preview, autocomplete, and validation. |
 | **Trade Journal & History** | **Done** | TanStack table on desktop, responsive cards on mobile, search by symbol, filters by person, broker, product, status, and outcome. |
 | **JSON Trade Import** | **Done** | Mobile-first JSON trade importer for ChatGPT/assistant trades. Supports schema v1.0, relative owners ('me', 'spouse'), broker mapping (Zerodha/Shoonya), R-risk preview, duplicate detection, atomic batch rollback, and initial stop-loss history. |
+| **Weekly Trading Reports** | **Done** | Complete weekly report engine with standardized JSON export (Schema v1.0) for Intraday (MIS), Swing (CNC), and Combined trading. Supports IST calendar boundaries, R-multiple distributions, time-of-day analytics, AI review metadata, data quality audits, and copy/export actions. |
 | **Trade Breakdown Detail** | **Done** | Itemized statutory charge audit snapshots, turnover, ROI %, execution timeline. |
 | **Open Positions Management** | **Done** | Deployed capital calculation, live exposure tracking, one-click close position modal with live preview. |
 | **Dashboard & Analytics** | **Done** | 6 Core KPI cards, Recharts cumulative equity curve, monthly Net P&L bar charts, broker comparison, product comparison. |
@@ -118,3 +119,48 @@ Accepted JSON format:
 10. Atomic rollback on database failure leaving 0 partial records.
 11. Mobile Android clipboard paste handling (CRLF, trailing whitespace, mobile cards).
 12. Data integrity verification across Trades, Positions, Dashboard, and Analytics queries.
+
+---
+
+## 5. Weekly Trading Reports with JSON Export Specification & Implementation
+
+### 5.1 Architecture & Calendar Integration
+- **IST Timezone (`Asia/Kolkata`)**: NSE/BSE operating calendar standard (UTC+05:30 offset). Monday-to-Friday market schedule with Sunday end boundaries to capture weekend settlement and corporate events without data leaks.
+- **Weekly Presets**: Pre-calculated selections for "Most Recently Completed Week", "Previous Week", "2 Weeks Ago", "3 Weeks Ago", alongside custom date pickers.
+- **Inclusion Policy (Zero Double-Counting)**:
+  - Trades opened in reporting week (`entry_at` in window).
+  - Trades closed in reporting week (`exit_at` in window, even if opened prior).
+  - Partial exit executions executed in reporting week.
+  - Open positions carried forward (`status == 'OPEN'`).
+  - Stop-loss management decisions logged in reporting week.
+
+### 5.2 Metrics & Calculation Integrity
+- Reuses existing financial and fee engines (`decimal.js`, `calculateTradePnl`, `calculateInitialRisk`).
+- Computes Win Rate, Profit Factor (Gross Wins / Gross Losses), Expectancy (₹/trade and R/trade), Realized R-Multiple, Max consecutive win/loss streaks, and Holding Durations.
+- **Strict Null Handling**: Never substitutes zero for missing information; missing targets, strategies, or rationales remain explicitly `null`.
+- **Stop-Loss Execution Semantics**: Stop-loss history records represent trade management decisions, never assumed broker execution confirmations (`is_broker_confirmed: false`).
+
+### 5.3 Strategy-Specific Analytics
+- **Intraday (MIS)**: Holding time in minutes, time-of-day execution buckets (Morning 09:15-11:30, Mid-day 11:30-13:30, Afternoon 13:30-15:30 IST), trades per day, repeated symbols.
+- **Swing (CNC)**: Holding duration in days, 6-bucket R-distribution (< -1R, -1R to 0R, 0R to +1R, +1R to +2R, +2R to +3R, > +3R), milestones reached (+1R, +2R, +3R), breakeven/profit stops, protected profit.
+
+### 5.4 AI Review Metadata & Standardized JSON Export (Schema v1.0)
+- Full JSON root keys: `report_version`, `report_type`, `generated_at`, `timezone`, `period`, `filters`, `summary`, `weekly_activity`, `trades`, `intraday`, `swing`, `portfolio_risk`, `ai_review`, `data_quality`.
+- Factual AI review fields: Negative R trades, stop-loss widened after entry, missing rationales, repeated symbols.
+- Direct "Copy AI Prompt" shortcut in UI formatted for instant feeding into ChatGPT/Claude assistants.
+
+### 5.5 Verification Test Matrix (14 Scenarios Passed)
+1. Intraday-only report generation.
+2. Swing-only report generation.
+3. Combined report generation.
+4. Me, Spouse, and Combined filter resolution.
+5. Trade opened in previous week and closed in selected week.
+6. Trade opened in selected week and still open (open risk calculation).
+7. Partial exits across multiple weeks.
+8. Multiple stop-loss updates labeled as management decisions.
+9. Missing optional fields verification (strict null handling).
+10. Correct fee and R-multiple calculations matching existing engine.
+11. Correct date handling across IST and market trading sessions.
+12. JSON export schema validation against Schema v1.0.
+13. Viewer role authorization rejection (HTTP 403 Forbidden).
+14. Mobile preview, export download, and clipboard copy functionality.

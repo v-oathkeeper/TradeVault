@@ -18,6 +18,7 @@ import {
   Sun,
   Moon,
   UploadCloud,
+  FileBarChart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/components/providers/UserContext';
@@ -185,6 +186,14 @@ export function MobileNav() {
                     <UploadCloud className="w-4 h-4 text-blue-500" />
                     <span>Import Trade</span>
                   </button>
+                  <Link
+                    href="/reports/weekly"
+                    onClick={() => setShowMoreMenu(false)}
+                    className="flex items-center gap-3 p-3 rounded-xl bg-[var(--background)] border border-[var(--border)] text-sm font-medium"
+                  >
+                    <FileBarChart className="w-4 h-4 text-indigo-500" />
+                    <span>Weekly Reports</span>
+                  </Link>
                   <Link
                     href="/exports"
                     onClick={() => setShowMoreMenu(false)}

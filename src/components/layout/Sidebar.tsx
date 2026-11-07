@@ -16,6 +16,7 @@ import {
   LogOut,
   ChevronRight,
   UploadCloud,
+  FileBarChart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
@@ -62,6 +63,12 @@ export function Sidebar() {
       title: 'Analytics',
       href: '/analytics',
       icon: BarChart3,
+    },
+    {
+      title: 'Weekly Reports',
+      href: '/reports/weekly',
+      icon: FileBarChart,
+      adminOnly: true,
     },
     {
       title: 'People',
