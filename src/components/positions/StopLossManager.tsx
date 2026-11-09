@@ -49,6 +49,16 @@ export function StopLossManager({
 }: StopLossManagerProps) {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentStop, setCurrentStop] = useState<number | null>(
+    trade.currentStopLoss ?? trade.initialStopLoss ?? null
+  );
+  const [history, setHistory] = useState<StopLossHistoryEntry[]>(stopHistory);
+
+  React.useEffect(() => {
+    setCurrentStop(trade.currentStopLoss ?? trade.initialStopLoss ?? null);
+    setHistory(stopHistory);
+  }, [trade.currentStopLoss, trade.initialStopLoss, stopHistory]);
+
   const [updateForm, setUpdateForm] = useState({
     newStopLoss: trade.currentStopLoss ?? trade.initialStopLoss ?? 0,
     stopType: 'TRAIL' as StopLossUpdateType,
@@ -62,18 +72,39 @@ export function StopLossManager({
       return;
     }
 
+    const previousStopVal = currentStop;
+    const newStopVal = Number(updateForm.newStopLoss);
+    const stopTypeVal = updateForm.stopType;
+    const notesVal = updateForm.notes || null;
+    const marketPriceVal = updateForm.marketPriceAtUpdate ? Number(updateForm.marketPriceAtUpdate) : null;
+
+    // Optimistic UI updates
+    setCurrentStop(newStopVal);
+    const optimisticEntry: StopLossHistoryEntry = {
+      id: `temp-${Date.now()}`,
+      tradeId: trade.id,
+      previousStop: previousStopVal,
+      newStop: newStopVal,
+      stopType: stopTypeVal,
+      marketPriceAtUpdate: marketPriceVal,
+      floatingRAtUpdate: null,
+      notes: notesVal,
+      createdBy: '',
+      createdAt: new Date().toISOString(),
+    };
+    setHistory((prev) => [optimisticEntry, ...prev]);
+    setShowUpdateModal(false);
+
     setIsSubmitting(true);
     try {
       const res = await fetch(`/api/trades/${trade.id}/stop-loss`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          newStopLoss: Number(updateForm.newStopLoss),
-          stopType: updateForm.stopType,
-          marketPriceAtUpdate: updateForm.marketPriceAtUpdate
-            ? Number(updateForm.marketPriceAtUpdate)
-            : null,
-          notes: updateForm.notes || null,
+          newStopLoss: newStopVal,
+          stopType: stopTypeVal,
+          marketPriceAtUpdate: marketPriceVal,
+          notes: notesVal,
         }),
       });
 
@@ -81,17 +112,19 @@ export function StopLossManager({
       if (!res.ok) throw new Error(json.error || 'Failed to update stop-loss');
 
       toast.success('Stop-loss updated', {
-        description: `New stop: ₹${Number(updateForm.newStopLoss).toFixed(2)} (${updateForm.stopType})`,
+        description: `New stop: ₹${newStopVal.toFixed(2)} (${stopTypeVal})`,
       });
 
-      setShowUpdateModal(false);
       onUpdated?.();
     } catch (err: any) {
+      // Rollback optimistic state
+      setCurrentStop(previousStopVal);
+      setHistory((prev) => prev.filter((item) => item.id !== optimisticEntry.id));
       toast.error('Could not update stop-loss', { description: err.message });
     } finally {
       setIsSubmitting(false);
     }
-  }, [updateForm, trade.id, onUpdated]);
+  }, [updateForm, trade.id, currentStop, onUpdated]);
 
   // Set breakeven shortcut
   const setBreakeven = () => {
@@ -103,10 +136,9 @@ export function StopLossManager({
     }));
   };
 
-  const currentStop = trade.currentStopLoss ?? trade.initialStopLoss;
-  const stopMoved = trade.currentStopLoss !== null &&
+  const stopMoved = currentStop !== null &&
     trade.initialStopLoss !== null &&
-    trade.currentStopLoss !== trade.initialStopLoss;
+    currentStop !== trade.initialStopLoss;
 
   return (
     <div className="space-y-4">
@@ -234,20 +266,20 @@ export function StopLossManager({
       )}
 
       {/* Stop-Loss History Timeline */}
-      {stopHistory.length > 0 && (
+      {history.length > 0 && (
         <div className="space-y-2.5">
           <span className="text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider flex items-center gap-1.5">
             <Clock className="w-3 h-3" />
-            Stop-Loss History ({stopHistory.length} update{stopHistory.length !== 1 ? 's' : ''})
+            Stop-Loss History ({history.length} update{history.length !== 1 ? 's' : ''})
           </span>
           <div className="relative pl-4">
             {/* Timeline line */}
             <div className="absolute left-0 top-0 bottom-0 w-px bg-[var(--border)] ml-1.5" />
 
             <div className="space-y-3">
-              {stopHistory.map((entry, idx) => {
+              {history.map((entry, idx) => {
                 const typeInfo = STOP_TYPE_LABELS[entry.stopType];
-                const isLatest = idx === stopHistory.length - 1;
+                const isLatest = idx === history.length - 1;
                 const moved = entry.previousStop !== null && entry.previousStop !== entry.newStop;
                 const increase = entry.previousStop !== null && entry.newStop > entry.previousStop;
 

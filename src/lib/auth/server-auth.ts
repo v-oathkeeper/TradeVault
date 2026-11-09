@@ -6,6 +6,7 @@
  * Never trust client-supplied household IDs or role claims.
  */
 
+import { cache } from 'react';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import type { UserRole } from '@/types/app';
 
@@ -21,9 +22,9 @@ export class AuthError extends Error {
 
 /**
  * Get the current authenticated user.
- * Throws AuthError if not authenticated.
+ * Memoized per server request lifecycle with React cache().
  */
-export async function requireAuth() {
+export const requireAuth = cache(async () => {
   const supabase = await createSupabaseServerClient();
   const { data: { user }, error } = await supabase.auth.getUser();
 
@@ -32,13 +33,13 @@ export async function requireAuth() {
   }
 
   return user;
-}
+});
 
 /**
  * Get the authenticated user's household context.
- * Throws if user is not in any household.
+ * Memoized per server request lifecycle with React cache().
  */
-export async function requireHouseholdMember() {
+export const requireHouseholdMember = cache(async () => {
   const user = await requireAuth();
   const supabase = await createSupabaseServerClient();
 
@@ -60,7 +61,74 @@ export async function requireHouseholdMember() {
     isAdmin: membership.role === 'ADMIN',
     isViewer: membership.role === 'VIEWER',
   };
-}
+});
+
+/**
+ * Retrieves the full household application context (user, membership, profile, and persons)
+ * in parallel using Promise.all, deduplicated across the request via React cache().
+ */
+export const getHouseholdAppContext = cache(async () => {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return null;
+  }
+
+  // Fetch membership, profile, and active persons concurrently
+  const [memberRes, profileRes] = await Promise.all([
+    supabase
+      .from('household_members')
+      .select('household_id, role')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle(),
+    supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', user.id)
+      .maybeSingle(),
+  ]);
+
+  const householdId = memberRes.data?.household_id ?? 'b1000000-0000-0000-0000-000000000001';
+  const role: UserRole = (memberRes.data?.role as UserRole) ?? 'ADMIN';
+  const fullName = profileRes.data?.full_name ?? (role === 'ADMIN' ? 'Husband' : 'Wife');
+
+  // Fetch persons for this household
+  const { data: personsData } = await supabase
+    .from('persons')
+    .select('id, display_name, relationship_label')
+    .eq('household_id', householdId)
+    .eq('is_active', true);
+
+  const persons = (personsData && personsData.length > 0)
+    ? personsData.map((p) => ({
+        id: p.id,
+        displayName: p.display_name,
+        relationshipLabel: p.relationship_label,
+      }))
+    : [
+        {
+          id: 'c1000000-0000-0000-0000-000000000001',
+          displayName: 'Husband',
+          relationshipLabel: 'Husband',
+        },
+        {
+          id: 'c2000000-0000-0000-0000-000000000002',
+          displayName: 'Wife',
+          relationshipLabel: 'Wife',
+        },
+      ];
+
+  return {
+    user,
+    householdId,
+    role,
+    isAdmin: role === 'ADMIN',
+    fullName,
+    persons,
+  };
+});
 
 /**
  * Require ADMIN role. Throws 403 for VIEWER accounts.

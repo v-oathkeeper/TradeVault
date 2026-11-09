@@ -24,8 +24,13 @@ import { cn } from '@/lib/utils';
 import { useUser } from '@/components/providers/UserContext';
 import { useTheme } from 'next-themes';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
-import { ImportTradeModal } from '@/components/trades/ImportTradeModal';
+import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
+
+const ImportTradeModal = dynamic(
+  () => import('@/components/trades/ImportTradeModal').then((m) => m.ImportTradeModal),
+  { ssr: false }
+);
 
 export function MobileNav() {
   const pathname = usePathname();

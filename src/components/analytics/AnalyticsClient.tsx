@@ -25,8 +25,16 @@ import {
   Cell,
 } from 'recharts';
 import { KPICard } from '@/components/dashboard/KPICard';
-import { MonthlyBarChart } from '@/components/charts/MonthlyBarChart';
+import dynamic from 'next/dynamic';
 import { Badge } from '@/components/ui/Badge';
+
+const MonthlyBarChart = dynamic(
+  () => import('@/components/charts/MonthlyBarChart').then((mod) => mod.MonthlyBarChart),
+  {
+    loading: () => <div className="h-64 rounded-2xl bg-[var(--background)] animate-pulse" />,
+    ssr: false,
+  }
+);
 import { PnlDisplay } from '@/components/ui/PnlDisplay';
 import { useUser } from '@/components/providers/UserContext';
 import { formatINR, cn } from '@/lib/utils';

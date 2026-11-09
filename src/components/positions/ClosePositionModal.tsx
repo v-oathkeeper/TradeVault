@@ -17,9 +17,17 @@ interface ClosePositionModalProps {
   trade: Trade | null;
   open: boolean;
   onClose: () => void;
+  onTradeClosed?: (tradeId: string) => void;
+  onRollback?: (trade: Trade) => void;
 }
 
-export function ClosePositionModal({ trade, open, onClose }: ClosePositionModalProps) {
+export function ClosePositionModal({
+  trade,
+  open,
+  onClose,
+  onTradeClosed,
+  onRollback,
+}: ClosePositionModalProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -159,12 +167,18 @@ export function ClosePositionModal({ trade, open, onClose }: ClosePositionModalP
 
   const onSubmit = async (data: any) => {
     setIsSubmitting(true);
+    const closingTrade = trade;
+
+    // Optimistically notify parent immediately
+    onTradeClosed?.(closingTrade.id);
+    onClose();
+
     try {
-      const res = await fetch(`/api/trades/${trade.id}`, {
+      const res = await fetch(`/api/trades/${closingTrade.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...trade,
+          ...closingTrade,
           exitPrice: Number(data.exitPrice),
           exitAt: new Date(data.exitAt).toISOString(),
           status: 'CLOSED',
@@ -176,10 +190,10 @@ export function ClosePositionModal({ trade, open, onClose }: ClosePositionModalP
         throw new Error(json.error || 'Failed to close position');
       }
 
-      toast.success(`Closed position for ${trade.symbol}`);
-      onClose();
-      router.refresh();
+      toast.success(`Closed position for ${closingTrade.symbol}`);
     } catch (err: any) {
+      // Revert optimistic removal on server failure
+      onRollback?.(closingTrade);
       toast.error('Could not close position', { description: err.message });
     } finally {
       setIsSubmitting(false);

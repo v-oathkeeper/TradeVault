@@ -29,8 +29,13 @@ import { toDecimal } from '@/lib/calculations/decimal-utils';
 import { calculateInitialRisk } from '@/lib/calculations/r-multiple';
 import { formatINR, cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
-import { ImportTradeModal } from '@/components/trades/ImportTradeModal';
+import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
+
+const ImportTradeModal = dynamic(
+  () => import('@/components/trades/ImportTradeModal').then((mod) => mod.ImportTradeModal),
+  { ssr: false }
+);
 
 interface TradeFormProps {
   brokers: { id: string; code: 'KITE' | 'SHOONYA'; name: string }[];

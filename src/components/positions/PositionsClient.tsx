@@ -31,24 +31,33 @@ function RLevelBadge({ label, price, color }: { label: string; price: number; co
 }
 
 export function PositionsClient({ initialTrades }: PositionsClientProps) {
-  const router = useRouter();
   const { getPersonLabel, selectedPersonId, isAdmin } = useUser();
+  const [trades, setTrades] = useState<Trade[]>(initialTrades);
   const [activeClosingTrade, setActiveClosingTrade] = useState<Trade | null>(null);
 
-  const onClosed = useCallback(() => {
-    router.refresh();
-  }, [router]);
+  React.useEffect(() => {
+    setTrades(initialTrades);
+  }, [initialTrades]);
+
+  // Optimistic UI handlers
+  const handleTradeClosed = useCallback((tradeId: string) => {
+    setTrades((prev) => prev.filter((t) => t.id !== tradeId));
+  }, []);
+
+  const handleRollback = useCallback((tradeToRestore: Trade) => {
+    setTrades((prev) => [tradeToRestore, ...prev]);
+  }, []);
 
   // Filter open positions and by selected person
   const openPositions = useMemo(() => {
-    return initialTrades.filter((t) => {
+    return trades.filter((t) => {
       if (t.status !== 'OPEN') return false;
       if (selectedPersonId !== 'combined' && t.portfolioOwnerId !== selectedPersonId) {
         return false;
       }
       return true;
     });
-  }, [initialTrades, selectedPersonId]);
+  }, [trades, selectedPersonId]);
 
   // Total invested capital in open positions
   const totalInvested = useMemo(() => {
@@ -288,6 +297,8 @@ export function PositionsClient({ initialTrades }: PositionsClientProps) {
         trade={activeClosingTrade}
         open={Boolean(activeClosingTrade)}
         onClose={() => setActiveClosingTrade(null)}
+        onTradeClosed={handleTradeClosed}
+        onRollback={handleRollback}
       />
     </div>
   );

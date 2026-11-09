@@ -15,14 +15,43 @@ import {
   UploadCloud,
   Plus,
 } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import { KPICard } from '@/components/dashboard/KPICard';
-import { PortfolioChart, type ChartDataPoint } from '@/components/charts/PortfolioChart';
-import { MonthlyBarChart } from '@/components/charts/MonthlyBarChart';
+import type { ChartDataPoint } from '@/components/charts/PortfolioChart';
 import { RecentTradesList } from '@/components/dashboard/RecentTradesList';
-import { ImportTradeModal } from '@/components/trades/ImportTradeModal';
 import { useUser } from '@/components/providers/UserContext';
 import { formatDate, formatINR } from '@/lib/utils';
 import type { Trade, MonthlyPnl } from '@/types/app';
+
+// Lazy-load heavy Recharts visualizers and modals to keep initial bundle ultra-light
+const PortfolioChart = dynamic(
+  () => import('@/components/charts/PortfolioChart').then((m) => m.PortfolioChart),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[280px] w-full rounded-2xl bg-[var(--background)] animate-pulse flex items-center justify-center text-xs text-[var(--muted)]">
+        Loading equity chart...
+      </div>
+    ),
+  }
+);
+
+const MonthlyBarChart = dynamic(
+  () => import('@/components/charts/MonthlyBarChart').then((m) => m.MonthlyBarChart),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[280px] w-full rounded-2xl bg-[var(--background)] animate-pulse flex items-center justify-center text-xs text-[var(--muted)]">
+        Loading monthly breakdown...
+      </div>
+    ),
+  }
+);
+
+const ImportTradeModal = dynamic(
+  () => import('@/components/trades/ImportTradeModal').then((m) => m.ImportTradeModal),
+  { ssr: false }
+);
 
 interface DashboardClientProps {
   initialTrades: Trade[];

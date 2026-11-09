@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useDeferredValue, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import {
   Search,
   Plus,
@@ -15,8 +16,9 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   UploadCloud,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
-import { ImportTradeModal } from '@/components/trades/ImportTradeModal';
 import { TradeCard } from '@/components/trades/TradeCard';
 import { Badge } from '@/components/ui/Badge';
 import { PnlDisplay } from '@/components/ui/PnlDisplay';
@@ -26,6 +28,11 @@ import { useUser } from '@/components/providers/UserContext';
 import { formatDate, formatINR, cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { Trade, TradeType, TradeStatus } from '@/types/app';
+
+const ImportTradeModal = dynamic(
+  () => import('@/components/trades/ImportTradeModal').then((mod) => mod.ImportTradeModal),
+  { ssr: false }
+);
 
 interface TradeHistoryClientProps {
   initialTrades: Trade[];
@@ -37,6 +44,8 @@ export function TradeHistoryClient({ initialTrades }: TradeHistoryClientProps) {
 
   const [trades, setTrades] = useState<Trade[]>(initialTrades);
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearch = useDeferredValue(searchQuery);
+
   const [selectedPerson, setSelectedPerson] = useState<string>('all');
   const [selectedBroker, setSelectedBroker] = useState<string>('all');
   const [selectedType, setSelectedType] = useState<string>('all');
@@ -47,13 +56,22 @@ export function TradeHistoryClient({ initialTrades }: TradeHistoryClientProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
 
-  // Filtered and sorted trades
+  // Pagination state
+  const PAGE_SIZE = 25;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Reset to first page when any filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [deferredSearch, selectedPerson, selectedBroker, selectedType, selectedStatus, selectedOutcome]);
+
+  // Filtered and sorted trades using deferred search for non-blocking typing
   const filteredTrades = useMemo(() => {
     return trades.filter((trade) => {
       // Search
       if (
-        searchQuery &&
-        !trade.symbol.toLowerCase().includes(searchQuery.toLowerCase())
+        deferredSearch &&
+        !trade.symbol.toLowerCase().includes(deferredSearch.toLowerCase())
       ) {
         return false;
       }
@@ -84,13 +102,19 @@ export function TradeHistoryClient({ initialTrades }: TradeHistoryClientProps) {
     });
   }, [
     trades,
-    searchQuery,
+    deferredSearch,
     selectedPerson,
     selectedBroker,
     selectedType,
     selectedStatus,
     selectedOutcome,
   ]);
+
+  const totalPages = Math.ceil(filteredTrades.length / PAGE_SIZE) || 1;
+  const paginatedTrades = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredTrades.slice(start, start + PAGE_SIZE);
+  }, [filteredTrades, currentPage]);
 
   const handleDeleteTrade = async () => {
     if (!deleteTargetId) return;
@@ -108,7 +132,6 @@ export function TradeHistoryClient({ initialTrades }: TradeHistoryClientProps) {
 
       setTrades((prev) => prev.filter((t) => t.id !== deleteTargetId));
       toast.success('Trade deleted successfully');
-      router.refresh();
     } catch (err: any) {
       toast.error('Could not delete trade', { description: err.message });
     } finally {
@@ -227,7 +250,7 @@ export function TradeHistoryClient({ initialTrades }: TradeHistoryClientProps) {
         <>
           {/* Mobile view (< lg) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:hidden">
-            {filteredTrades.map((trade) => (
+            {paginatedTrades.map((trade) => (
               <TradeCard
                 key={trade.id}
                 trade={trade}
@@ -258,7 +281,7 @@ export function TradeHistoryClient({ initialTrades }: TradeHistoryClientProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
-                {filteredTrades.map((trade) => {
+                {paginatedTrades.map((trade) => {
                   const personLabel = getPersonLabel(trade.portfolioOwnerId);
                   const brokerCode = trade.broker?.code ?? 'KITE';
 
@@ -375,6 +398,42 @@ export function TradeHistoryClient({ initialTrades }: TradeHistoryClientProps) {
               </tbody>
             </table>
           </div>
+
+          {/* Client-side Pagination Controls */}
+          {filteredTrades.length > PAGE_SIZE && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-[var(--card)] border border-[var(--border)] text-xs text-[var(--muted)]">
+              <div>
+                Showing <span className="font-semibold text-[var(--foreground)]">{(currentPage - 1) * PAGE_SIZE + 1}</span> to{' '}
+                <span className="font-semibold text-[var(--foreground)]">
+                  {Math.min(currentPage * PAGE_SIZE, filteredTrades.length)}
+                </span>{' '}
+                of <span className="font-semibold text-[var(--foreground)]">{filteredTrades.length}</span> trades
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[var(--card)] transition-colors font-medium text-[var(--foreground)]"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>Prev</span>
+                </button>
+                <span className="px-2 font-mono text-[var(--foreground)]">
+                  {currentPage} / {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[var(--card)] transition-colors font-medium text-[var(--foreground)]"
+                >
+                  <span>Next</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
 
