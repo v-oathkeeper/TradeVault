@@ -14,6 +14,7 @@ import {
   Activity,
   UploadCloud,
   Plus,
+  PiggyBank,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { KPICard } from '@/components/dashboard/KPICard';
@@ -22,6 +23,7 @@ import { RecentTradesList } from '@/components/dashboard/RecentTradesList';
 import { useUser } from '@/components/providers/UserContext';
 import { formatDate, formatINR } from '@/lib/utils';
 import type { Trade, MonthlyPnl } from '@/types/app';
+import type { HouseholdCapitalSummary } from '@/types/capital';
 
 // Lazy-load heavy Recharts visualizers and modals to keep initial bundle ultra-light
 const PortfolioChart = dynamic(
@@ -53,14 +55,40 @@ const ImportTradeModal = dynamic(
   { ssr: false }
 );
 
+const CapitalCards = dynamic(
+  () => import('@/components/capital/CapitalCards').then((m) => m.CapitalCards),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-32 w-full rounded-2xl bg-[var(--card)] animate-pulse border border-[var(--border)]" />
+    ),
+  }
+);
+
+const ManageCapitalModal = dynamic(
+  () => import('@/components/capital/ManageCapitalModal').then((m) => m.ManageCapitalModal),
+  { ssr: false }
+);
+
+const RecordWithdrawalModal = dynamic(
+  () => import('@/components/capital/RecordWithdrawalModal').then((m) => m.RecordWithdrawalModal),
+  { ssr: false }
+);
+
 interface DashboardClientProps {
   initialTrades: Trade[];
+  capitalSummary?: HouseholdCapitalSummary;
+  isAdmin?: boolean;
 }
 
-export function DashboardClient({ initialTrades }: DashboardClientProps) {
+export function DashboardClient({ initialTrades, capitalSummary, isAdmin: isAdminProp }: DashboardClientProps) {
   const router = useRouter();
-  const { selectedPersonId, getPersonLabel, persons, isAdmin } = useUser();
+  const { selectedPersonId, getPersonLabel, persons, isAdmin: isAdminCtx } = useUser();
+  const isAdmin = isAdminProp ?? isAdminCtx;
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showManageCapital, setShowManageCapital] = useState(false);
+  const [showWithdrawal, setShowWithdrawal] = useState(false);
+  const [capitalPreselectedOwner, setCapitalPreselectedOwner] = useState<string | undefined>();
 
   // Filter trades based on selected person
   const filteredTrades = useMemo(() => {
@@ -243,6 +271,33 @@ export function DashboardClient({ initialTrades }: DashboardClientProps) {
         )}
       </div>
 
+      {/* ── Capital Cards — Prominent top section ── */}
+      {capitalSummary && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-1.5">
+              <PiggyBank className="w-4 h-4 text-blue-500" />
+              Portfolio Capital
+            </h3>
+            <Link href="/capital" className="text-xs text-blue-500 hover:text-blue-400 font-medium transition-colors">
+              Manage →
+            </Link>
+          </div>
+          <CapitalCards
+            summary={capitalSummary}
+            isAdmin={isAdmin}
+            onManageCapital={(ownerId) => {
+              setCapitalPreselectedOwner(ownerId);
+              setShowManageCapital(true);
+            }}
+            onRecordWithdrawal={(ownerId) => {
+              setCapitalPreselectedOwner(ownerId);
+              setShowWithdrawal(true);
+            }}
+          />
+        </div>
+      )}
+
       {/* 6 Core KPI Cards Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         <KPICard
@@ -339,6 +394,26 @@ export function DashboardClient({ initialTrades }: DashboardClientProps) {
           router.refresh();
         }}
       />
+
+      {/* Capital Modals (admin only) */}
+      {isAdmin && capitalSummary && (
+        <>
+          <ManageCapitalModal
+            open={showManageCapital}
+            owners={capitalSummary.owners}
+            initialOwnerId={capitalPreselectedOwner}
+            onClose={() => setShowManageCapital(false)}
+            onSuccess={() => router.refresh()}
+          />
+          <RecordWithdrawalModal
+            open={showWithdrawal}
+            owners={capitalSummary.owners}
+            initialOwnerId={capitalPreselectedOwner}
+            onClose={() => setShowWithdrawal(false)}
+            onSuccess={() => router.refresh()}
+          />
+        </>
+      )}
     </div>
   );
 }

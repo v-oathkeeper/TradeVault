@@ -21,6 +21,14 @@ export type AppliesToSide = 'BUY' | 'SELL' | 'BOTH';
 export type CalculationBasis = 'TURNOVER_PCT' | 'FLAT_PER_EVENT' | 'FLAT_PER_CRORE' | 'ON_SERVICE_CHARGES';
 export type MovementType = 'DEPOSIT' | 'WITHDRAWAL';
 export type ThemePreference = 'LIGHT' | 'DARK' | 'SYSTEM';
+export type CapitalTxType =
+  | 'INITIAL_ALLOCATION'
+  | 'CAPITAL_CONTRIBUTION'
+  | 'CAPITAL_ADJUSTMENT'
+  | 'CAPITAL_WITHDRAWAL'
+  | 'PROFIT_WITHDRAWAL';
+export type StrategyBucketEnum = 'INTRADAY' | 'SWING';
+
 
 export interface Database {
   public: {
@@ -630,9 +638,102 @@ export interface Database {
           }
         ];
       };
+      capital_transactions: {
+        Row: {
+          id: string;
+          household_id: string;
+          portfolio_owner_id: string;
+          strategy_bucket: StrategyBucketEnum;
+          tx_type: CapitalTxType;
+          amount: number;
+          tx_date: string;
+          created_by: string;
+          created_at: string;
+          notes: string | null;
+          reversal_of: string | null;
+          idempotency_key: string | null;
+          previous_amount: number | null;
+          new_amount: number | null;
+          adjustment_diff: number | null;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          portfolio_owner_id: string;
+          strategy_bucket: StrategyBucketEnum;
+          tx_type: CapitalTxType;
+          amount: number;
+          tx_date: string;
+          created_by: string;
+          created_at?: string;
+          notes?: string | null;
+          reversal_of?: string | null;
+          idempotency_key?: string | null;
+          previous_amount?: number | null;
+          new_amount?: number | null;
+          adjustment_diff?: number | null;
+        };
+        Update: {
+          id?: string;
+          household_id?: string;
+          portfolio_owner_id?: string;
+          strategy_bucket?: StrategyBucketEnum;
+          tx_type?: CapitalTxType;
+          amount?: number;
+          tx_date?: string;
+          created_by?: string;
+          created_at?: string;
+          notes?: string | null;
+          reversal_of?: string | null;
+          idempotency_key?: string | null;
+          previous_amount?: number | null;
+          new_amount?: number | null;
+          adjustment_diff?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'capital_transactions_household_id_fkey';
+            columns: ['household_id'];
+            isOneToOne: false;
+            referencedRelation: 'households';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'capital_transactions_portfolio_owner_id_fkey';
+            columns: ['portfolio_owner_id'];
+            isOneToOne: false;
+            referencedRelation: 'persons';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
     };
-    Views: {
-      [_ in never]: never;
+        Views: {
+      v_capital_summary: {
+        Row: {
+          household_id: string | null;
+          portfolio_owner_id: string | null;
+          strategy_bucket: StrategyBucketEnum | null;
+          contributed_capital: number | null;
+          cumulative_net_realized_pnl: number | null;
+          cumulative_profit_withdrawals: number | null;
+          cumulative_capital_withdrawals: number | null;
+          available_profit_for_withdrawal: number | null;
+          current_capital: number | null;
+          closed_trade_count: number | null;
+        };
+        Relationships: [];
+      };
+      v_portfolio_pnl_summary: {
+        Row: {
+          household_id: string | null;
+          portfolio_owner_id: string | null;
+          strategy_bucket: StrategyBucketEnum | null;
+          closed_trade_count: number | null;
+          cumulative_net_realized_pnl: number | null;
+        };
+        Relationships: [];
+      };
     };
     Functions: {
       is_admin: {
@@ -673,4 +774,22 @@ export interface Database {
       [_ in never]: never;
     };
   };
+}
+
+export interface CapitalTransactionRow {
+  id: string;
+  household_id: string;
+  portfolio_owner_id: string;
+  strategy_bucket: StrategyBucketEnum;
+  tx_type: CapitalTxType;
+  amount: number;
+  tx_date: string;
+  created_by: string;
+  created_at: string;
+  notes: string | null;
+  reversal_of: string | null;
+  idempotency_key: string | null;
+  previous_amount: number | null;
+  new_amount: number | null;
+  adjustment_diff: number | null;
 }

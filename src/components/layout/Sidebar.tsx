@@ -17,6 +17,7 @@ import {
   ChevronRight,
   UploadCloud,
   FileBarChart,
+  PiggyBank,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
@@ -63,6 +64,11 @@ export function Sidebar() {
       title: 'Open Positions',
       href: '/positions',
       icon: TrendingUp,
+    },
+    {
+      title: 'Capital',
+      href: '/capital',
+      icon: PiggyBank,
     },
     {
       title: 'Analytics',

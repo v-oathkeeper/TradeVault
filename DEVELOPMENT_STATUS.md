@@ -242,3 +242,87 @@ Comprehensive benchmarks were executed against the production Supabase cloud dat
 - **Next.js Production Build**: `npm run build` compiled successfully in 6.0 seconds with all 22 static/dynamic routes verified.
 - **Financial Calculation Integrity**: 100% preserved; no formulas, fee tariffs, or R-multiple calculations were altered.
 - **RLS Multi-Tenant Security**: 100% preserved; all queries remain strictly scoped to `household_id` with active membership checks.
+
+
+---
+
+## 7. Capital Management, Profit Tracking and Withdrawal Module
+
+### 7.1 Architecture & Strategy Isolation
+
+- **Independent Portfolio Accounting**:
+  - Husband — Intraday (MIS)
+  - Husband — Swing (CNC)
+  - Wife — Intraday (MIS)
+  - Wife — Swing (CNC)
+- **Documented Strategy Mapping**:
+  - `trade_type = 'INTRADAY'` maps canonically to `strategy_bucket = 'INTRADAY'`.
+  - `trade_type = 'DELIVERY'` maps canonically to `strategy_bucket = 'SWING'`.
+  - Enforced via database function `strategy_bucket_for_trade_type()` and TypeScript mapper `tradeTypeToStrategyBucket()`.
+- **Single Source of Truth for Realized P&L**:
+  - Realized net trading P&L is derived strictly from completed trade records (`trades.net_pnl WHERE status = 'CLOSED'`), itemized with exact actual/estimated charges (STT, GST 18%, brokerage, exchange turnover, SEBI, stamp duty, DP events).
+  - Trading P&L is never stored in duplicate tables, preventing dual-source drift.
+  - Partial exits realize P&L only for the exited quantity; remaining quantity stays open and never becomes withdrawable profit.
+
+### 7.2 Financial Terminology & Accounting Formulas
+
+1. **Contributed Capital**:
+   $$\text{contributed\_capital} = \sum(\text{INITIAL\_ALLOCATION} + \text{CAPITAL\_CONTRIBUTION} + \text{adjustment\_diff}) - \sum(\text{CAPITAL\_WITHDRAWAL})$$
+   - Historical contributed capital is never overwritten by trading profits or losses.
+2. **Net Realized P&L**:
+   $$\text{cumulative\_net\_realized\_pnl} = \sum(\text{trades.net\_pnl})_{status='CLOSED'}$$
+   - Excludes unrealized open-position P&L. Excludes capital deposits and withdrawals.
+3. **Profit Withdrawals**:
+   $$\text{cumulative\_profit\_withdrawals} = \sum(\text{PROFIT\_WITHDRAWAL})$$
+   - Tracked independently from capital withdrawals. Never counted as trading losses.
+4. **Available Profit for Withdrawal**:
+   $$\text{available\_profit\_for\_withdrawal} = \max(0, \text{cumulative\_net\_realized\_pnl} - \text{cumulative\_profit\_withdrawals})$$
+   - Trading losses consume remaining available profit before touching principal. Available profit is bounded at zero (never negative).
+5. **Current Capital (Trading Equity)**:
+   $$\text{current\_capital} = \text{contributed\_capital} + \text{cumulative\_net\_realized\_pnl} - \text{cumulative\_profit\_withdrawals}$$
+
+### 7.3 Database Schema Migration (`007_capital_management.sql`)
+
+- **Table: `capital_transactions`**:
+  - `id` (UUID PK), `household_id` (FK), `portfolio_owner_id` (FK to `persons`), `strategy_bucket` (`INTRADAY` | `SWING`), `tx_type` (`capital_tx_type` enum).
+  - `amount` (`NUMERIC(16,2)` > 0).
+  - `tx_date` (DATE), `created_by` (FK to `auth.users`), `created_at` (TIMESTAMPTZ), `notes` (TEXT).
+  - `reversal_of` (self-referencing FK for immutable correction trails).
+  - `idempotency_key` (TEXT UNIQUE) for preventing duplicate client submissions.
+  - Audit fields for adjustments: `previous_amount`, `new_amount`, `adjustment_diff`.
+- **Views**:
+  - `v_portfolio_pnl_summary`: Aggregates closed trade counts and net P&L grouped by household, portfolio owner, and strategy bucket.
+  - `v_capital_summary`: Full balance-sheet join between the transaction ledger and trade P&L view.
+- **Row Level Security (RLS)**:
+  - `cap_tx_select`: Any authenticated household member can read records.
+  - `cap_tx_insert_admin`: Only active `ADMIN` accounts can insert records.
+  - No `UPDATE` or `DELETE` policies — ledger is append-only.
+
+### 7.4 Dashboard & UI Implementation
+
+- **Prominent Dual Owner Cards (`CapitalCards.tsx`)**:
+  - Displayed at the very top of the Dashboard.
+  - Husband's Portfolio & Wife's Portfolio cards calculated independently.
+  - Full breakdown of Contributed Capital, Current Capital, Net Realized P&L, Available Profit for Withdrawal, and Withdrawn amounts across Intraday (MIS), Swing (CNC), and Combined totals.
+  - Color-coded: green for positive P&L, red for negative P&L.
+  - Mobile-first, compact Android-optimized layout.
+- **Dedicated Capital Hub (`/capital`)**:
+  - **Overview Tab**: Live cards and action triggers.
+  - **History Tab**: Complete chronological audit ledger with transaction types, amounts, and reversal tags.
+  - **Reconciliation Tab (`ReconciliationView.tsx`)**: Balance-sheet reconciliation walkthrough showing Opening Balance, Additions/Adjustments, Trading Net P&L, Profit Withdrawals, Capital Withdrawals, and Reconciled Current Equity.
+- **ADMIN Capital Operations Modals**:
+  - `ManageCapitalModal.tsx`: Initial allocation, additional contribution, and capital adjustments with old/new/diff audit preview.
+  - `RecordWithdrawalModal.tsx`: Profit vs. Capital withdrawal with available balance verification, rejection of excessive profit withdrawals, and Admin confirmation with recorded reason for capital overrides.
+
+### 7.5 Verification & Test Results
+
+- **Vitest Unit & Integration Suite**: **143 tests passing across 7 test suites** (100% pass rate).
+- **All 6 Specification Test Scenarios Verified**:
+  - **Test A (Profit and withdrawal)**: ₹20k initial + ₹3k profit - ₹2k profit withdrawal $\rightarrow$ Available Profit = ₹1,000, Current Capital = ₹21,000.
+  - **Test B (Loss consumes available profit)**: Additional ₹1.5k loss $\rightarrow$ Lifetime P&L = ₹1,500, Available Profit = ₹0 (not negative), Current Capital = ₹19,500.
+  - **Test C (Profit recovery after loss)**: Additional ₹2.5k profit $\rightarrow$ Lifetime P&L = ₹4,000, Available Profit = ₹2,000, Current Capital = ₹22,000.
+  - **Test D (Capital withdrawal)**: ₹20k capital - ₹5k capital withdrawal $\rightarrow$ Contributed = ₹15,000, P&L unchanged, Available Profit unchanged, Current Capital = ₹15,000.
+  - **Test E (Strategy isolation)**: Husband Intraday (-₹1k) vs Swing (+₹3k) isolated; Wife portfolios untouched; combined household = sum of parts.
+  - **Test F (Partial exits)**: Only exited quantity realizes P&L; remaining quantity is strictly unrealized.
+- **TypeScript Type Check (`npx tsc --noEmit`)**: Exited with code `0` (Zero errors).
+- **Next.js Production Build (`npm run build`)**: Successfully compiled all 26 static/dynamic routes.

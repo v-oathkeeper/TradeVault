@@ -19,6 +19,7 @@ import {
   Moon,
   UploadCloud,
   FileBarChart,
+  PiggyBank,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/components/providers/UserContext';
@@ -169,6 +170,14 @@ export function MobileNav() {
               >
                 <BarChart3 className="w-4 h-4 text-blue-500" />
                 <span>Analytics</span>
+              </Link>
+              <Link
+                href="/capital"
+                onClick={() => setShowMoreMenu(false)}
+                className="flex items-center gap-3 p-3 rounded-xl bg-[var(--background)] border border-[var(--border)] text-sm font-medium"
+              >
+                <PiggyBank className="w-4 h-4 text-emerald-500" />
+                <span>Capital</span>
               </Link>
               <Link
                 href="/people"
