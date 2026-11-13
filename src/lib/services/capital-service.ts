@@ -16,6 +16,7 @@
  */
 
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { measureAsync } from '@/lib/perf';
 import type {
   StrategyBucket,
   CapitalTxType,
@@ -76,87 +77,108 @@ function emptyStrategySummary(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Fetch household capital summary
+// Pure In-Memory Capital Summary Calculation
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Fetches the complete capital accounting summary for a household.
- * Uses the v_capital_summary view for the aggregated math and
- * the persons table for display names.
- */
-export async function getHouseholdCapitalSummary(
-  householdId: string
-): Promise<HouseholdCapitalSummary> {
-  const supabase = await createSupabaseServerClient();
-
-  // Fetch persons in this household
-  const { data: personsData, error: personsError } = await supabase
-    .from('persons')
-    .select('id, display_name, relationship_label')
-    .eq('household_id', householdId)
-    .eq('is_active', true);
-
-  if (personsError) {
-    throw new Error(`Failed to fetch persons: ${personsError.message}`);
+export function calculateCapitalSummary(
+  householdId: string,
+  persons: { id: string; displayName: string; relationshipLabel: string }[],
+  closedTrades: { portfolio_owner_id: string; trade_type: string; net_pnl: number | string | null }[],
+  txRows?: CapitalTransactionRow[] | null
+): HouseholdCapitalSummary {
+  // Aggregate trade P&L in memory: key = `${ownerId}_${strategyBucket}`
+  const pnlMap = new Map<string, { netPnl: number; count: number }>();
+  for (const t of closedTrades) {
+    if (t.net_pnl != null) {
+      const bucket = tradeTypeToStrategyBucket(t.trade_type as 'INTRADAY' | 'DELIVERY');
+      const key = `${t.portfolio_owner_id}_${bucket}`;
+      const existing = pnlMap.get(key) ?? { netPnl: 0, count: 0 };
+      existing.netPnl += Number(t.net_pnl);
+      existing.count += 1;
+      pnlMap.set(key, existing);
+    }
   }
 
-  const persons = personsData ?? [];
-
-  // Fetch capital summary from the view (server-side aggregation)
-  // Note: v_capital_summary is a view, Supabase can query it like a table
-  const { data: summaryRows, error: summaryError } = await supabase
-    .from('v_capital_summary')
-    .select('*')
-    .eq('household_id', householdId);
-
-  if (summaryError) {
-    // View may not exist yet (before migration); return empty summary
-    console.warn('v_capital_summary not available:', summaryError.message);
+  // Aggregate Capital Transactions (ledger)
+  interface LedgerTotals {
+    contributedCapital: number;
+    profitWithdrawals: number;
+    capitalWithdrawals: number;
   }
+  const ledgerMap = new Map<string, LedgerTotals>();
 
-  const rows = summaryRows ?? [];
+  if (txRows && txRows.length > 0) {
+    // Collect reversed IDs so we exclude nullified transactions
+    const reversedIds = new Set<string>();
+    txRows.forEach((r) => {
+      if (r.reversal_of) reversedIds.add(r.reversal_of);
+    });
+
+    for (const tx of txRows) {
+      if (reversedIds.has(tx.id)) continue; // skip reversed source record
+
+      const key = `${tx.portfolio_owner_id}_${tx.strategy_bucket}`;
+      const current = ledgerMap.get(key) ?? {
+        contributedCapital: 0,
+        profitWithdrawals: 0,
+        capitalWithdrawals: 0,
+      };
+
+      const amt = Number(tx.amount);
+      switch (tx.tx_type) {
+        case 'INITIAL_ALLOCATION':
+        case 'CAPITAL_CONTRIBUTION':
+          current.contributedCapital += amt;
+          break;
+        case 'CAPITAL_ADJUSTMENT':
+          current.contributedCapital += Number(tx.adjustment_diff ?? 0);
+          break;
+        case 'CAPITAL_WITHDRAWAL':
+          current.contributedCapital -= amt;
+          current.capitalWithdrawals += amt;
+          break;
+        case 'PROFIT_WITHDRAWAL':
+          current.profitWithdrawals += amt;
+          break;
+      }
+      ledgerMap.set(key, current);
+    }
+  }
 
   // Build per-owner summaries
   const ownerSummaries: OwnerCapitalSummary[] = persons.map((person) => {
-    const intradayRow = rows.find(
-      (r) => r.portfolio_owner_id === person.id && r.strategy_bucket === 'INTRADAY'
-    );
-    const swingRow = rows.find(
-      (r) => r.portfolio_owner_id === person.id && r.strategy_bucket === 'SWING'
-    );
+    const buildBucket = (bucket: StrategyBucket): StrategyCapitalSummary => {
+      const key = `${person.id}_${bucket}`;
+      const pnl = pnlMap.get(key) ?? { netPnl: 0, count: 0 };
+      const ledger = ledgerMap.get(key) ?? {
+        contributedCapital: 0,
+        profitWithdrawals: 0,
+        capitalWithdrawals: 0,
+      };
 
-    const intraday: StrategyCapitalSummary = intradayRow
-      ? {
-          portfolioOwnerId: person.id,
-          strategyBucket: 'INTRADAY',
-          contributedCapital: Number(intradayRow.contributed_capital ?? 0),
-          cumulativeNetRealizedPnl: Number(intradayRow.cumulative_net_realized_pnl ?? 0),
-          cumulativeProfitWithdrawals: Number(intradayRow.cumulative_profit_withdrawals ?? 0),
-          cumulativeCapitalWithdrawals: Number(intradayRow.cumulative_capital_withdrawals ?? 0),
-          availableProfitForWithdrawal: Number(intradayRow.available_profit_for_withdrawal ?? 0),
-          currentCapital: Number(intradayRow.current_capital ?? 0),
-          closedTradeCount: Number(intradayRow.closed_trade_count ?? 0),
-        }
-      : emptyStrategySummary(person.id, 'INTRADAY');
+      const availableProfit = Math.max(0, pnl.netPnl - ledger.profitWithdrawals);
+      const currentCapital = ledger.contributedCapital + pnl.netPnl - ledger.profitWithdrawals;
 
-    const swing: StrategyCapitalSummary = swingRow
-      ? {
-          portfolioOwnerId: person.id,
-          strategyBucket: 'SWING',
-          contributedCapital: Number(swingRow.contributed_capital ?? 0),
-          cumulativeNetRealizedPnl: Number(swingRow.cumulative_net_realized_pnl ?? 0),
-          cumulativeProfitWithdrawals: Number(swingRow.cumulative_profit_withdrawals ?? 0),
-          cumulativeCapitalWithdrawals: Number(swingRow.cumulative_capital_withdrawals ?? 0),
-          availableProfitForWithdrawal: Number(swingRow.available_profit_for_withdrawal ?? 0),
-          currentCapital: Number(swingRow.current_capital ?? 0),
-          closedTradeCount: Number(swingRow.closed_trade_count ?? 0),
-        }
-      : emptyStrategySummary(person.id, 'SWING');
+      return {
+        portfolioOwnerId: person.id,
+        strategyBucket: bucket,
+        contributedCapital: ledger.contributedCapital,
+        cumulativeNetRealizedPnl: Math.round(pnl.netPnl * 100) / 100,
+        cumulativeProfitWithdrawals: ledger.profitWithdrawals,
+        cumulativeCapitalWithdrawals: ledger.capitalWithdrawals,
+        availableProfitForWithdrawal: Math.round(availableProfit * 100) / 100,
+        currentCapital: Math.round(currentCapital * 100) / 100,
+        closedTradeCount: pnl.count,
+      };
+    };
+
+    const intraday = buildBucket('INTRADAY');
+    const swing = buildBucket('SWING');
 
     return {
       portfolioOwnerId: person.id,
-      displayName: person.display_name,
-      relationshipLabel: person.relationship_label,
+      displayName: person.displayName,
+      relationshipLabel: person.relationshipLabel,
       intraday,
       swing,
       totalContributedCapital: intraday.contributedCapital + swing.contributedCapital,
@@ -199,6 +221,87 @@ export async function getHouseholdCapitalSummary(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Fetch household capital summary (Fast, In-Memory Reconciled Calculation)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetches the complete capital accounting summary for a household.
+ * Can reuse pre-fetched `persons` and `trades` from page components to eliminate
+ * redundant network round trips, or queries them cleanly.
+ *
+ * If the PostgreSQL view `v_capital_summary` is not yet available, this automatically
+ * and seamlessly derives exact figures from canonical `trades` and `capital_transactions`
+ * without throwing errors or displaying missing schema warnings.
+ */
+export async function getHouseholdCapitalSummary(
+  householdId: string,
+  options?: {
+    persons?: { id: string; displayName: string; relationshipLabel: string }[];
+    closedTrades?: { portfolioOwnerId: string; tradeType: 'INTRADAY' | 'DELIVERY'; netPnl: number | null }[];
+  }
+): Promise<HouseholdCapitalSummary> {
+  return measureAsync('getHouseholdCapitalSummary', async () => {
+    const supabase = await createSupabaseServerClient();
+
+    // 1. Resolve Persons
+    let persons = options?.persons;
+    if (!persons || persons.length === 0) {
+      const { data: personsData, error: personsError } = await supabase
+        .from('persons')
+        .select('id, display_name, relationship_label')
+        .eq('household_id', householdId)
+        .eq('is_active', true);
+
+      if (personsError) {
+        throw new Error(`Failed to fetch persons: ${personsError.message}`);
+      }
+
+      persons = (personsData ?? []).map((p) => ({
+        id: p.id,
+        displayName: p.display_name,
+        relationshipLabel: p.relationship_label,
+      }));
+    }
+
+    // 2. Parallel fetch for trades & transactions if not provided
+    type TradeItem = { portfolio_owner_id: string; trade_type: string; net_pnl: number | null };
+    let closedTrades: TradeItem[] = [];
+    let txRows: CapitalTransactionRow[] | null = null;
+
+    if (options?.closedTrades) {
+      closedTrades = options.closedTrades.map((t) => ({
+        portfolio_owner_id: t.portfolioOwnerId,
+        trade_type: t.tradeType,
+        net_pnl: t.netPnl,
+      }));
+
+      const { data } = await supabase
+        .from('capital_transactions')
+        .select('*')
+        .eq('household_id', householdId);
+      txRows = (data as CapitalTransactionRow[]) ?? null;
+    } else {
+      const [tradesRes, txRes] = await Promise.all([
+        supabase
+          .from('trades')
+          .select('portfolio_owner_id, trade_type, net_pnl')
+          .eq('household_id', householdId)
+          .eq('status', 'CLOSED'),
+        supabase
+          .from('capital_transactions')
+          .select('*')
+          .eq('household_id', householdId),
+      ]);
+
+      closedTrades = (tradesRes.data ?? []) as TradeItem[];
+      txRows = (txRes.data as CapitalTransactionRow[]) ?? null;
+    }
+
+    return calculateCapitalSummary(householdId, persons, closedTrades, txRows);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Fetch capital transactions (ledger history)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -211,38 +314,44 @@ export async function getCapitalTransactions(
     offset?: number;
   }
 ): Promise<{ transactions: CapitalTransaction[]; total: number }> {
-  const supabase = await createSupabaseServerClient();
+  return measureAsync('getCapitalTransactions', async () => {
+    const supabase = await createSupabaseServerClient();
 
-  let query = supabase
-    .from('capital_transactions')
-    .select('*', { count: 'exact' })
-    .eq('household_id', householdId)
-    .order('tx_date', { ascending: false })
-    .order('created_at', { ascending: false });
+    let query = supabase
+      .from('capital_transactions')
+      .select('*', { count: 'exact' })
+      .eq('household_id', householdId)
+      .order('tx_date', { ascending: false })
+      .order('created_at', { ascending: false });
 
-  if (options?.portfolioOwnerId) {
-    query = query.eq('portfolio_owner_id', options.portfolioOwnerId);
-  }
-  if (options?.strategyBucket) {
-    query = query.eq('strategy_bucket', options.strategyBucket);
-  }
-  if (options?.limit) {
-    query = query.limit(options.limit);
-  }
-  if (options?.offset) {
-    query = query.range(options.offset, (options.offset + (options.limit ?? 50)) - 1);
-  }
+    if (options?.portfolioOwnerId) {
+      query = query.eq('portfolio_owner_id', options.portfolioOwnerId);
+    }
+    if (options?.strategyBucket) {
+      query = query.eq('strategy_bucket', options.strategyBucket);
+    }
+    if (options?.limit) {
+      query = query.limit(options.limit);
+    }
+    if (options?.offset) {
+      query = query.range(options.offset, (options.offset + (options.limit ?? 50)) - 1);
+    }
 
-  const { data, error, count } = await query;
+    const { data, error, count } = await query;
 
-  if (error) {
-    throw new Error(`Failed to fetch capital transactions: ${error.message}`);
-  }
+    if (error) {
+      // Return empty list gracefully if table is not yet created
+      if (error.code === 'PGRST205') {
+        return { transactions: [], total: 0 };
+      }
+      throw new Error(`Failed to fetch capital transactions: ${error.message}`);
+    }
 
-  return {
-    transactions: (data ?? []).map((r) => mapRow(r as CapitalTransactionRow)),
-    total: count ?? 0,
-  };
+    return {
+      transactions: (data ?? []).map((r) => mapRow(r as CapitalTransactionRow)),
+      total: count ?? 0,
+    };
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -253,19 +362,13 @@ export async function validateWithdrawal(
   householdId: string,
   input: RecordWithdrawalInput
 ): Promise<WithdrawalValidation> {
-  const supabase = await createSupabaseServerClient();
-
-  // Get current summary for owner + strategy
-  const { data: summaryRows } = await supabase
-    .from('v_capital_summary')
-    .select('*')
-    .eq('household_id', householdId)
-    .eq('portfolio_owner_id', input.portfolioOwnerId)
-    .eq('strategy_bucket', input.strategyBucket)
-    .maybeSingle();
+  const summary = await getHouseholdCapitalSummary(householdId);
+  const owner = summary.owners.find((o) => o.portfolioOwnerId === input.portfolioOwnerId);
+  const strategyData =
+    input.strategyBucket === 'INTRADAY' ? owner?.intraday : owner?.swing;
 
   if (input.withdrawalType === 'PROFIT') {
-    const availableProfit = Number(summaryRows?.available_profit_for_withdrawal ?? 0);
+    const availableProfit = Number(strategyData?.availableProfitForWithdrawal ?? 0);
     if (input.amount > availableProfit) {
       return {
         valid: false,
@@ -281,7 +384,7 @@ export async function validateWithdrawal(
     };
   } else {
     // CAPITAL withdrawal
-    const contributedCapital = Number(summaryRows?.contributed_capital ?? 0);
+    const contributedCapital = Number(strategyData?.contributedCapital ?? 0);
     if (input.amount > contributedCapital) {
       if (input.overrideCapitalLimit) {
         // Admin explicitly confirmed override

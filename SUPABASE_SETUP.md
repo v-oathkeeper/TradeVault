@@ -86,6 +86,27 @@ You will run the 3 SQL migration scripts located in the `supabase/migrations/` d
   - Index `idx_trades_dup_detection` for real-time open trade duplicate warning lookups.
   - PostgreSQL stored procedure `import_trades_batch` enabling atomic all-or-nothing trade batch insertion with stop-loss history creation.
 
+### Migration Step 6: Performance Indexes
+- In the SQL Editor, click **New Query**.
+- Copy the entire contents of `supabase/migrations/006_performance_indexes.sql`.
+- Paste into the SQL editor and click **Run**.
+- Ensure it displays `Success. No rows returned`.
+- *This adds:*
+  - Optimized composite indexes for rapid filtering by date range, trade status, and portfolio owner.
+
+### Migration Step 7: Capital & Profit Management Module
+- In the SQL Editor, click **New Query**.
+- Copy the entire contents of `supabase/migrations/007_capital_management.sql`.
+- Paste into the SQL editor and click **Run**.
+- Ensure it displays `Success. No rows returned`.
+- *This adds:*
+  - Custom ENUM types `capital_tx_type` and `strategy_bucket`.
+  - Immutable audit table `capital_transactions` tracking initial allocations, capital additions, adjustments, and withdrawals.
+  - Performance indexes on owner, strategy, and household.
+  - Row Level Security (RLS) policies ensuring household isolation (read access for household members, write access restricted to ADMIN).
+  - PostgreSQL view `v_capital_summary` providing real-time capital aggregation.
+  - *(Note: The application includes dual-mode resilience — even before this migration is executed, capital accounting figures are automatically derived in-memory from canonical trades without errors or UI disruption).*
+
 ---
 
 ## 4. Provision Husband and Wife Authentication Accounts

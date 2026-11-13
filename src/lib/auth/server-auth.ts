@@ -8,6 +8,7 @@
 
 import { cache } from 'react';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { measureAsync } from '@/lib/perf';
 import type { UserRole } from '@/types/app';
 
 export class AuthError extends Error {
@@ -20,19 +21,53 @@ export class AuthError extends Error {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Short-lived in-memory server cache for household context
+// Eliminates repetitive sequential WAN queries on every page transition.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface CachedAppContext {
+  householdId: string;
+  role: UserRole;
+  isAdmin: boolean;
+  fullName: string;
+  persons: {
+    id: string;
+    displayName: string;
+    relationshipLabel: string;
+  }[];
+  cachedAt: number;
+}
+
+const appContextCache = new Map<string, CachedAppContext>();
+const CONTEXT_CACHE_TTL_MS = 60_000; // 60 seconds
+
+/**
+ * Invalidate cached household context (call on user/person mutations).
+ */
+export function invalidateHouseholdCache(userId?: string) {
+  if (userId) {
+    appContextCache.delete(userId);
+  } else {
+    appContextCache.clear();
+  }
+}
+
 /**
  * Get the current authenticated user.
  * Memoized per server request lifecycle with React cache().
  */
 export const requireAuth = cache(async () => {
-  const supabase = await createSupabaseServerClient();
-  const { data: { user }, error } = await supabase.auth.getUser();
+  return measureAsync('requireAuth', async () => {
+    const supabase = await createSupabaseServerClient();
+    const { data: { user }, error } = await supabase.auth.getUser();
 
-  if (error || !user) {
-    throw new AuthError('Authentication required', 401);
-  }
+    if (error || !user) {
+      throw new AuthError('Authentication required', 401);
+    }
 
-  return user;
+    return user;
+  });
 });
 
 /**
@@ -41,6 +76,19 @@ export const requireAuth = cache(async () => {
  */
 export const requireHouseholdMember = cache(async () => {
   const user = await requireAuth();
+
+  // Check cache first
+  const cached = appContextCache.get(user.id);
+  if (cached && Date.now() - cached.cachedAt < CONTEXT_CACHE_TTL_MS) {
+    return {
+      user,
+      householdId: cached.householdId,
+      role: cached.role,
+      isAdmin: cached.isAdmin,
+      isViewer: cached.role === 'VIEWER',
+    };
+  }
+
   const supabase = await createSupabaseServerClient();
 
   const { data: membership, error } = await supabase
@@ -65,69 +113,96 @@ export const requireHouseholdMember = cache(async () => {
 
 /**
  * Retrieves the full household application context (user, membership, profile, and persons)
- * in parallel using Promise.all, deduplicated across the request via React cache().
+ * with request-scoped deduplication via React cache() and 60-second in-memory server cache.
  */
 export const getHouseholdAppContext = cache(async () => {
-  const supabase = await createSupabaseServerClient();
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  return measureAsync('getHouseholdAppContext', async () => {
+    const supabase = await createSupabaseServerClient();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-  if (userError || !user) {
-    return null;
-  }
+    if (userError || !user) {
+      return null;
+    }
 
-  // Fetch membership, profile, and active persons concurrently
-  const [memberRes, profileRes] = await Promise.all([
-    supabase
-      .from('household_members')
-      .select('household_id, role')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .maybeSingle(),
-    supabase
-      .from('profiles')
-      .select('full_name')
-      .eq('id', user.id)
-      .maybeSingle(),
-  ]);
+    // Fast-path: return from in-memory cache if fresh
+    const cached = appContextCache.get(user.id);
+    if (cached && Date.now() - cached.cachedAt < CONTEXT_CACHE_TTL_MS) {
+      return {
+        user,
+        householdId: cached.householdId,
+        role: cached.role,
+        isAdmin: cached.isAdmin,
+        fullName: cached.fullName,
+        persons: cached.persons,
+      };
+    }
 
-  const householdId = memberRes.data?.household_id ?? 'b1000000-0000-0000-0000-000000000001';
-  const role: UserRole = (memberRes.data?.role as UserRole) ?? 'ADMIN';
-  const fullName = profileRes.data?.full_name ?? (role === 'ADMIN' ? 'Husband' : 'Wife');
+    // Concurrent fetch for membership and profile
+    const [memberRes, profileRes] = await Promise.all([
+      supabase
+        .from('household_members')
+        .select('household_id, role')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .maybeSingle(),
+      supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .maybeSingle(),
+    ]);
 
-  // Fetch persons for this household
-  const { data: personsData } = await supabase
-    .from('persons')
-    .select('id, display_name, relationship_label')
-    .eq('household_id', householdId)
-    .eq('is_active', true);
+    const householdId = memberRes.data?.household_id ?? 'b1000000-0000-0000-0000-000000000001';
+    const role: UserRole = (memberRes.data?.role as UserRole) ?? 'ADMIN';
+    const fullName = profileRes.data?.full_name ?? (role === 'ADMIN' ? 'Husband' : 'Wife');
 
-  const persons = (personsData && personsData.length > 0)
-    ? personsData.map((p) => ({
-        id: p.id,
-        displayName: p.display_name,
-        relationshipLabel: p.relationship_label,
-      }))
-    : [
-        {
-          id: 'c1000000-0000-0000-0000-000000000001',
-          displayName: 'Husband',
-          relationshipLabel: 'Husband',
-        },
-        {
-          id: 'c2000000-0000-0000-0000-000000000002',
-          displayName: 'Wife',
-          relationshipLabel: 'Wife',
-        },
-      ];
+    // Fetch active persons for this household
+    const { data: personsData } = await supabase
+      .from('persons')
+      .select('id, display_name, relationship_label')
+      .eq('household_id', householdId)
+      .eq('is_active', true);
 
-  return {
-    user,
-    householdId,
-    role,
-    isAdmin: role === 'ADMIN',
-    fullName,
-    persons,
-  };
+    const persons = (personsData && personsData.length > 0)
+      ? personsData.map((p) => ({
+          id: p.id,
+          displayName: p.display_name,
+          relationshipLabel: p.relationship_label,
+        }))
+      : [
+          {
+            id: 'c1000000-0000-0000-0000-000000000001',
+            displayName: 'Husband',
+            relationshipLabel: 'Husband',
+          },
+          {
+            id: 'c2000000-0000-0000-0000-000000000002',
+            displayName: 'Wife',
+            relationshipLabel: 'Wife',
+          },
+        ];
+
+    const result = {
+      user,
+      householdId,
+      role,
+      isAdmin: role === 'ADMIN',
+      fullName,
+      persons,
+    };
+
+    // Populate server cache
+    appContextCache.set(user.id, {
+      householdId,
+      role,
+      isAdmin: role === 'ADMIN',
+      fullName,
+      persons,
+      cachedAt: Date.now(),
+    });
+
+    return result;
+  });
 });
 
 /**

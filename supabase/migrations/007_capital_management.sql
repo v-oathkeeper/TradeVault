@@ -70,33 +70,54 @@ CREATE TABLE IF NOT EXISTS capital_transactions (
   -- CAPITAL_ADJUSTMENT audit trail
   previous_amount   NUMERIC(16,2),   -- contributed capital before adjustment
   new_amount        NUMERIC(16,2),   -- contributed capital after adjustment
-  adjustment_diff   NUMERIC(16,2),   -- signed delta (new - old), can be negative
-
-  -- Constraint: reversal records should reference a valid tx in same household
-  CONSTRAINT chk_reversal_same_household CHECK (
-    reversal_of IS NULL OR
-    household_id = (SELECT household_id FROM capital_transactions ref WHERE ref.id = reversal_of)
-  )
+  adjustment_diff   NUMERIC(16,2)    -- signed delta (new - old), can be negative
 );
+
+-- ============================================================
+-- TRIGGER: validate_capital_transaction_reversal
+-- Enforces that a reversal record references an existing transaction
+-- within the same household. (PostgreSQL CHECK constraints cannot contain subqueries).
+-- ============================================================
+CREATE OR REPLACE FUNCTION validate_capital_transaction_reversal()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.reversal_of IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM capital_transactions ref
+      WHERE ref.id = NEW.reversal_of AND ref.household_id = NEW.household_id
+    ) THEN
+      RAISE EXCEPTION 'Reversal transaction must reference an existing transaction within the same household.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_validate_capital_transaction_reversal ON capital_transactions;
+
+CREATE TRIGGER trg_validate_capital_transaction_reversal
+  BEFORE INSERT OR UPDATE ON capital_transactions
+  FOR EACH ROW
+  EXECUTE FUNCTION validate_capital_transaction_reversal();
 
 -- ============================================================
 -- INDEXES for query performance
 -- ============================================================
 
 -- Primary query: portfolio summary per owner+strategy
-CREATE INDEX idx_capital_tx_owner_strategy
+CREATE INDEX IF NOT EXISTS idx_capital_tx_owner_strategy
   ON capital_transactions(portfolio_owner_id, strategy_bucket);
 
 -- Household-scoped queries (RLS + summary)
-CREATE INDEX idx_capital_tx_household
+CREATE INDEX IF NOT EXISTS idx_capital_tx_household
   ON capital_transactions(household_id);
 
 -- Chronological history view
-CREATE INDEX idx_capital_tx_date
+CREATE INDEX IF NOT EXISTS idx_capital_tx_date
   ON capital_transactions(tx_date DESC);
 
 -- Reversal lookup
-CREATE INDEX idx_capital_tx_reversal
+CREATE INDEX IF NOT EXISTS idx_capital_tx_reversal
   ON capital_transactions(reversal_of)
   WHERE reversal_of IS NOT NULL;
 
@@ -106,12 +127,14 @@ CREATE INDEX idx_capital_tx_reversal
 ALTER TABLE capital_transactions ENABLE ROW LEVEL SECURITY;
 
 -- All household members can read capital data (dashboard cards)
+DROP POLICY IF EXISTS "cap_tx_select" ON capital_transactions;
 CREATE POLICY "cap_tx_select"
   ON capital_transactions
   FOR SELECT
   USING (household_id = get_my_household_id());
 
 -- Only ADMIN can insert capital transactions
+DROP POLICY IF EXISTS "cap_tx_insert_admin" ON capital_transactions;
 CREATE POLICY "cap_tx_insert_admin"
   ON capital_transactions
   FOR INSERT
@@ -219,7 +242,7 @@ SELECT
   COALESCE(l.cumulative_profit_withdrawals, 0)          AS cumulative_profit_withdrawals,
   COALESCE(l.cumulative_capital_withdrawals, 0)         AS cumulative_capital_withdrawals,
   -- available_profit = MAX(0, net_pnl - profit_withdrawals)
-  GREATEST(0,
+  GREATEST(0::numeric,
     COALESCE(p.cumulative_net_realized_pnl, 0)
     - COALESCE(l.cumulative_profit_withdrawals, 0)
   )                                                      AS available_profit_for_withdrawal,

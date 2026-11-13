@@ -13,9 +13,9 @@ export default async function CapitalPage() {
   const appContext = await getHouseholdAppContext();
   if (!appContext) return null;
 
-  // Fetch capital summary and recent transactions in parallel
+  // Fetch capital summary and recent transactions in parallel (passing preloaded persons)
   const [summary, transactionsResult] = await Promise.all([
-    getHouseholdCapitalSummary(appContext.householdId).catch(() => ({
+    getHouseholdCapitalSummary(appContext.householdId, { persons: appContext.persons }).catch(() => ({
       householdId: appContext.householdId,
       owners: appContext.persons.map((p) => ({
         portfolioOwnerId: p.id,
