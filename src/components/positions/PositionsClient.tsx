@@ -21,11 +21,20 @@ interface PositionsClientProps {
   initialTrades: Trade[];
 }
 
-function RLevelBadge({ label, price, color }: { label: string; price: number; color: string }) {
+function MilestoneBadge({ label, price, status }: { label: string; price: number; status?: string | null }) {
+  const isReached = status === 'REACHED';
   return (
-    <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[10px] font-bold font-mono', color)}>
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[10px] font-bold font-mono',
+        isReached
+          ? 'text-emerald-500 border-emerald-500/30 bg-emerald-500/10'
+          : 'text-purple-400 border-purple-500/30 bg-purple-500/10'
+      )}
+    >
       <span className="font-normal opacity-70">{label}</span>
       ₹{price.toFixed(2)}
+      {isReached && <span className="text-[9px]">✓</span>}
     </span>
   );
 }
@@ -83,7 +92,7 @@ export function PositionsClient({ initialTrades }: PositionsClientProps) {
             Active Open Positions
           </h2>
           <p className="text-xs text-[var(--muted)]">
-            Live exposures, stop-loss tracking, and R-multiple management
+            Live exposures, trailing stop-loss tracking, and Gemini milestones
           </p>
         </div>
 
@@ -222,41 +231,40 @@ export function PositionsClient({ initialTrades }: PositionsClientProps) {
                         </div>
                         {pos.initialRiskRupees && (
                           <span className="text-[10px] text-rose-400">
-                            1R = {formatINR(pos.initialRiskRupees)}
+                            Risk: {formatINR(pos.initialRiskRupees)}
                           </span>
                         )}
                       </div>
 
-                      {/* R-Level Target Badges */}
-                      {pos.r1Price && (
+                      {/* Gemini Milestone Badges */}
+                      {(pos.milestone1_target || pos.milestone2_target || pos.milestone3_target || pos.plannedTarget) && (
                         <div className="flex flex-wrap gap-1.5 pt-1">
-                          {pos.r1Price && (
-                            <RLevelBadge
-                              label="1R"
-                              price={pos.r1Price}
-                              color="text-lime-400 border-lime-500/30 bg-lime-500/10"
+                          {pos.milestone1_target && (
+                            <MilestoneBadge
+                              label="M1"
+                              price={pos.milestone1_target}
+                              status={pos.milestone1_status}
                             />
                           )}
-                          {pos.r2Price && (
-                            <RLevelBadge
-                              label="2R"
-                              price={pos.r2Price}
-                              color="text-emerald-400 border-emerald-500/30 bg-emerald-500/10"
+                          {pos.milestone2_target && (
+                            <MilestoneBadge
+                              label="M2"
+                              price={pos.milestone2_target}
+                              status={pos.milestone2_status}
                             />
                           )}
-                          {pos.r3Price && (
-                            <RLevelBadge
-                              label="3R"
-                              price={pos.r3Price}
-                              color="text-cyan-400 border-cyan-500/30 bg-cyan-500/10"
+                          {pos.milestone3_target && (
+                            <MilestoneBadge
+                              label="M3"
+                              price={pos.milestone3_target}
+                              status={pos.milestone3_status}
                             />
                           )}
-                          {pos.plannedTarget && (
-                            <RLevelBadge
-                              label={`Target${pos.plannedRR ? ` (${pos.plannedRR.toFixed(1)}R)` : ''}`}
-                              price={pos.plannedTarget}
-                              color="text-purple-400 border-purple-500/30 bg-purple-500/10"
-                            />
+                          {pos.plannedTarget && !pos.milestone1_target && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[10px] font-bold font-mono text-purple-400 border-purple-500/30 bg-purple-500/10">
+                              <span className="font-normal opacity-70">Target</span>
+                              ₹{pos.plannedTarget.toFixed(2)}
+                            </span>
                           )}
                         </div>
                       )}

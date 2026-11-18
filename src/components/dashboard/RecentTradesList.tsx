@@ -106,11 +106,6 @@ export function RecentTradesList({ trades }: RecentTradesListProps) {
                 ) : (
                   <div className="flex flex-col items-end">
                     <PnlDisplay value={trade.netPnl} size="sm" />
-                    {trade.realizedRMultiple != null && (
-                      <span className={`text-[10px] font-mono font-bold ${trade.realizedRMultiple >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {trade.realizedRMultiple >= 0 ? '+' : ''}{trade.realizedRMultiple.toFixed(2)}R
-                      </span>
-                    )}
                   </div>
                 )}
               </div>

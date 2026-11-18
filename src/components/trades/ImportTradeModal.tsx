@@ -468,11 +468,6 @@ export function ImportTradeModal({ open, onClose, onSuccess }: ImportTradeModalP
                               <div className="flex items-center gap-2">
                                 <span className="text-[var(--muted)]">Target: </span>
                                 <strong className="text-emerald-400">{formatINR(item.targetPrice)}</strong>
-                                {item.plannedRR && (
-                                  <span className="text-emerald-400/90 font-bold">
-                                    ({item.plannedRR.toFixed(1)}R)
-                                  </span>
-                                )}
                               </div>
                             )}
                           </div>

@@ -12,7 +12,6 @@ import {
   type ImportValidationResult,
 } from '@/lib/validation/import-schema';
 import { UUID_REGEX } from '@/lib/validation/schemas';
-import { calculateInitialRisk } from '@/lib/calculations/r-multiple';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/database';
 
@@ -584,14 +583,14 @@ export function validateTradesPayload({
       fieldErrors.notes = msg;
     }
 
-    // 12. Calculate risk metrics using R-Multiple Engine
+    // 12. Calculate risk metrics (pure rupee & percent risk, no R-multiples)
     let riskPerShare: number | undefined;
     let riskRupees: number | undefined;
     let riskPct: number | undefined;
-    let plannedRR: number | null = null;
-    let r1Price: number | undefined;
-    let r2Price: number | undefined;
-    let r3Price: number | undefined;
+    const plannedRR: number | null = null;
+    const r1Price: number | undefined = undefined;
+    const r2Price: number | undefined = undefined;
+    const r3Price: number | undefined = undefined;
 
     if (
       errors.length === 0 &&
@@ -599,23 +598,9 @@ export function validateTradesPayload({
       initialStopLoss > 0 &&
       quantity > 0
     ) {
-      const riskCalc = calculateInitialRisk({
-        entryPrice,
-        initialStopLoss,
-        quantity,
-        direction,
-        plannedTarget: targetPrice,
-      });
-
-      if (riskCalc) {
-        riskPerShare = riskCalc.riskPerShare;
-        riskRupees = riskCalc.riskRupees;
-        riskPct = riskCalc.riskPct;
-        plannedRR = riskCalc.plannedRR;
-        r1Price = riskCalc.r1Price;
-        r2Price = riskCalc.r2Price;
-        r3Price = riskCalc.r3Price;
-      }
+      riskPerShare = Math.abs(entryPrice - initialStopLoss);
+      riskRupees = riskPerShare * quantity;
+      riskPct = (riskPerShare / entryPrice) * 100;
     }
 
     // 13. Duplicate detection

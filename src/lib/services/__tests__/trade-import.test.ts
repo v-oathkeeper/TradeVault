@@ -143,7 +143,6 @@ describe('JSON Trade Import — Comprehensive 12-Scenario Suite', () => {
     expect(item.dbTradeType).toBe('DELIVERY');
     expect(item.riskPerShare).toBeCloseTo(6.95, 2);
     expect(item.riskRupees).toBeCloseTo(69.5, 2);
-    expect(item.plannedRR).toBeCloseTo(3.0, 1);
 
     // Database execution
     const mockSupabase = createMockSupabase();

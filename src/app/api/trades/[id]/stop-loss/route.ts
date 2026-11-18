@@ -15,7 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, requireTradeInHousehold } from '@/lib/auth/server-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { UpdateStopLossSchema } from '@/lib/validation/schemas';
-import { validateTrailingStopUpdate, calculateFloatingR } from '@/lib/calculations/r-multiple';
+import { validateTrailingStopUpdate } from '@/lib/calculations/r-multiple';
 
 export async function PATCH(
   request: NextRequest,
@@ -69,20 +69,8 @@ export async function PATCH(
       }
     }
 
-    // Compute floating R at time of update (if market price provided)
-    let floatingRAtUpdate: number | null = null;
-    if (validated.marketPriceAtUpdate && trade.initial_risk_rupees) {
-      const riskRupees = Number(trade.initial_risk_rupees);
-      // Rough unrealized P&L based on market price vs entry
-      const qty = 1; // We use riskRupees directly for ratio
-      const priceDiff = direction === 'LONG'
-        ? validated.marketPriceAtUpdate - entryPrice
-        : entryPrice - validated.marketPriceAtUpdate;
-      // floatingR = unrealized_pnl_per_share_ratio vs risk_per_share
-      // Since we don't have quantity here, use the ratio of price movements
-      const riskPerShare = riskRupees; // approximation if qty=1 not stored here
-      floatingRAtUpdate = calculateFloatingR(priceDiff, riskPerShare / 1);
-    }
+    // Floating R removed per requirement (null)
+    const floatingRAtUpdate: number | null = null;
 
     // Also update MAE / MFE if market price is provided
     const maeUpdates: Record<string, unknown> = {};

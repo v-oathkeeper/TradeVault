@@ -17,6 +17,7 @@
 
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { measureAsync } from '@/lib/perf';
+import { Decimal, toDecimal, roundToINR } from '@/lib/calculations/decimal-utils';
 import type {
   StrategyBucket,
   CapitalTxType,
@@ -87,25 +88,42 @@ export function calculateCapitalSummary(
   txRows?: CapitalTransactionRow[] | null
 ): HouseholdCapitalSummary {
   // Aggregate trade P&L in memory: key = `${ownerId}_${strategyBucket}`
-  const pnlMap = new Map<string, { netPnl: number; count: number }>();
+  const pnlMap = new Map<string, { netPnl: Decimal; count: number }>();
+  // Also total P&L per owner
+  const ownerPnlMap = new Map<string, Decimal>();
+
   for (const t of closedTrades) {
     if (t.net_pnl != null) {
       const bucket = tradeTypeToStrategyBucket(t.trade_type as 'INTRADAY' | 'DELIVERY');
       const key = `${t.portfolio_owner_id}_${bucket}`;
-      const existing = pnlMap.get(key) ?? { netPnl: 0, count: 0 };
-      existing.netPnl += Number(t.net_pnl);
+      const existing = pnlMap.get(key) ?? { netPnl: new Decimal(0), count: 0 };
+      existing.netPnl = existing.netPnl.plus(toDecimal(t.net_pnl));
       existing.count += 1;
       pnlMap.set(key, existing);
+
+      const ownerTotal = ownerPnlMap.get(t.portfolio_owner_id) ?? new Decimal(0);
+      ownerPnlMap.set(t.portfolio_owner_id, ownerTotal.plus(toDecimal(t.net_pnl)));
     }
   }
 
   // Aggregate Capital Transactions (ledger)
   interface LedgerTotals {
-    contributedCapital: number;
-    profitWithdrawals: number;
-    capitalWithdrawals: number;
+    contributedCapital: Decimal;
+    profitWithdrawals: Decimal;
+    capitalWithdrawals: Decimal;
+    initialCapital: Decimal;
+    additionalCapital: Decimal;
   }
   const ledgerMap = new Map<string, LedgerTotals>();
+  const ownerLedgerMap = new Map<string, LedgerTotals>();
+
+  const initLedger = (): LedgerTotals => ({
+    contributedCapital: new Decimal(0),
+    profitWithdrawals: new Decimal(0),
+    capitalWithdrawals: new Decimal(0),
+    initialCapital: new Decimal(0),
+    additionalCapital: new Decimal(0),
+  });
 
   if (txRows && txRows.length > 0) {
     // Collect reversed IDs so we exclude nullified transactions
@@ -117,31 +135,48 @@ export function calculateCapitalSummary(
     for (const tx of txRows) {
       if (reversedIds.has(tx.id)) continue; // skip reversed source record
 
-      const key = `${tx.portfolio_owner_id}_${tx.strategy_bucket}`;
-      const current = ledgerMap.get(key) ?? {
-        contributedCapital: 0,
-        profitWithdrawals: 0,
-        capitalWithdrawals: 0,
-      };
+      const bucket = tx.strategy_bucket || 'INTRADAY';
+      const key = `${tx.portfolio_owner_id}_${bucket}`;
+      const current = ledgerMap.get(key) ?? initLedger();
+      const ownerCurrent = ownerLedgerMap.get(tx.portfolio_owner_id) ?? initLedger();
 
-      const amt = Number(tx.amount);
+      const amt = toDecimal(tx.amount);
       switch (tx.tx_type) {
         case 'INITIAL_ALLOCATION':
+          current.initialCapital = current.initialCapital.plus(amt);
+          current.contributedCapital = current.contributedCapital.plus(amt);
+          ownerCurrent.initialCapital = ownerCurrent.initialCapital.plus(amt);
+          ownerCurrent.contributedCapital = ownerCurrent.contributedCapital.plus(amt);
+          break;
         case 'CAPITAL_CONTRIBUTION':
-          current.contributedCapital += amt;
+          current.additionalCapital = current.additionalCapital.plus(amt);
+          current.contributedCapital = current.contributedCapital.plus(amt);
+          ownerCurrent.additionalCapital = ownerCurrent.additionalCapital.plus(amt);
+          ownerCurrent.contributedCapital = ownerCurrent.contributedCapital.plus(amt);
           break;
-        case 'CAPITAL_ADJUSTMENT':
-          current.contributedCapital += Number(tx.adjustment_diff ?? 0);
+        case 'CAPITAL_ADJUSTMENT': {
+          const diff = toDecimal(tx.adjustment_diff ?? 0);
+          if (diff.greaterThan(0)) {
+            current.additionalCapital = current.additionalCapital.plus(diff);
+            ownerCurrent.additionalCapital = ownerCurrent.additionalCapital.plus(diff);
+          }
+          current.contributedCapital = current.contributedCapital.plus(diff);
+          ownerCurrent.contributedCapital = ownerCurrent.contributedCapital.plus(diff);
           break;
+        }
         case 'CAPITAL_WITHDRAWAL':
-          current.contributedCapital -= amt;
-          current.capitalWithdrawals += amt;
+          current.contributedCapital = current.contributedCapital.minus(amt);
+          current.capitalWithdrawals = current.capitalWithdrawals.plus(amt);
+          ownerCurrent.contributedCapital = ownerCurrent.contributedCapital.minus(amt);
+          ownerCurrent.capitalWithdrawals = ownerCurrent.capitalWithdrawals.plus(amt);
           break;
         case 'PROFIT_WITHDRAWAL':
-          current.profitWithdrawals += amt;
+          current.profitWithdrawals = current.profitWithdrawals.plus(amt);
+          ownerCurrent.profitWithdrawals = ownerCurrent.profitWithdrawals.plus(amt);
           break;
       }
       ledgerMap.set(key, current);
+      ownerLedgerMap.set(tx.portfolio_owner_id, ownerCurrent);
     }
   }
 
@@ -149,25 +184,21 @@ export function calculateCapitalSummary(
   const ownerSummaries: OwnerCapitalSummary[] = persons.map((person) => {
     const buildBucket = (bucket: StrategyBucket): StrategyCapitalSummary => {
       const key = `${person.id}_${bucket}`;
-      const pnl = pnlMap.get(key) ?? { netPnl: 0, count: 0 };
-      const ledger = ledgerMap.get(key) ?? {
-        contributedCapital: 0,
-        profitWithdrawals: 0,
-        capitalWithdrawals: 0,
-      };
+      const pnl = pnlMap.get(key) ?? { netPnl: new Decimal(0), count: 0 };
+      const ledger = ledgerMap.get(key) ?? initLedger();
 
-      const availableProfit = Math.max(0, pnl.netPnl - ledger.profitWithdrawals);
-      const currentCapital = ledger.contributedCapital + pnl.netPnl - ledger.profitWithdrawals;
+      const availableProfit = Decimal.max(0, pnl.netPnl.minus(ledger.profitWithdrawals));
+      const currentCapital = ledger.contributedCapital.plus(pnl.netPnl).minus(ledger.profitWithdrawals);
 
       return {
         portfolioOwnerId: person.id,
         strategyBucket: bucket,
-        contributedCapital: ledger.contributedCapital,
-        cumulativeNetRealizedPnl: Math.round(pnl.netPnl * 100) / 100,
-        cumulativeProfitWithdrawals: ledger.profitWithdrawals,
-        cumulativeCapitalWithdrawals: ledger.capitalWithdrawals,
-        availableProfitForWithdrawal: Math.round(availableProfit * 100) / 100,
-        currentCapital: Math.round(currentCapital * 100) / 100,
+        contributedCapital: roundToINR(ledger.contributedCapital).toNumber(),
+        cumulativeNetRealizedPnl: roundToINR(pnl.netPnl).toNumber(),
+        cumulativeProfitWithdrawals: roundToINR(ledger.profitWithdrawals).toNumber(),
+        cumulativeCapitalWithdrawals: roundToINR(ledger.capitalWithdrawals).toNumber(),
+        availableProfitForWithdrawal: roundToINR(availableProfit).toNumber(),
+        currentCapital: roundToINR(currentCapital).toNumber(),
         closedTradeCount: pnl.count,
       };
     };
@@ -175,48 +206,82 @@ export function calculateCapitalSummary(
     const intraday = buildBucket('INTRADAY');
     const swing = buildBucket('SWING');
 
+    const ownerLedger = ownerLedgerMap.get(person.id) ?? initLedger();
+    const ownerPnl = ownerPnlMap.get(person.id) ?? new Decimal(0);
+
+    // Couple's Capital Management Definitions:
+    // Invested Capital = Initial Capital + Additional Capital - Capital Withdrawals
+    const investedCapitalDec = ownerLedger.contributedCapital;
+    // All-time Profit = Lifetime cumulative net realized P&L from completed trades
+    const allTimeProfitDec = ownerPnl;
+    // Available Profit = Maximum of zero and (All-time Profit - Previous Profit Withdrawals)
+    const availableProfitDec = Decimal.max(0, allTimeProfitDec.minus(ownerLedger.profitWithdrawals));
+    // Current total capital / equity
+    const currentCapitalDec = investedCapitalDec.plus(allTimeProfitDec).minus(ownerLedger.profitWithdrawals);
+
+    const investedCapital = roundToINR(investedCapitalDec).toNumber();
+    const allTimeProfit = roundToINR(allTimeProfitDec).toNumber();
+    const availableProfit = roundToINR(availableProfitDec).toNumber();
+    const currentCapital = roundToINR(currentCapitalDec).toNumber();
+    const initialCapital = roundToINR(ownerLedger.initialCapital).toNumber();
+    const additionalCapital = roundToINR(ownerLedger.additionalCapital).toNumber();
+    const profitWithdrawn = roundToINR(ownerLedger.profitWithdrawals).toNumber();
+    const capitalWithdrawn = roundToINR(ownerLedger.capitalWithdrawals).toNumber();
+
     return {
       portfolioOwnerId: person.id,
       displayName: person.displayName,
       relationshipLabel: person.relationshipLabel,
+      investedCapital,
+      availableProfit,
+      allTimeProfit,
+      initialCapital,
+      additionalCapital,
+      profitWithdrawn,
+      capitalWithdrawn,
       intraday,
       swing,
-      totalContributedCapital: intraday.contributedCapital + swing.contributedCapital,
-      totalCurrentCapital: intraday.currentCapital + swing.currentCapital,
-      totalNetRealizedPnl: intraday.cumulativeNetRealizedPnl + swing.cumulativeNetRealizedPnl,
-      totalAvailableProfitForWithdrawal:
-        intraday.availableProfitForWithdrawal + swing.availableProfitForWithdrawal,
-      totalProfitWithdrawn:
-        intraday.cumulativeProfitWithdrawals + swing.cumulativeProfitWithdrawals,
-      totalCapitalWithdrawn:
-        intraday.cumulativeCapitalWithdrawals + swing.cumulativeCapitalWithdrawals,
+      totalContributedCapital: investedCapital,
+      totalCurrentCapital: currentCapital,
+      totalNetRealizedPnl: allTimeProfit,
+      totalAvailableProfitForWithdrawal: availableProfit,
+      totalProfitWithdrawn: profitWithdrawn,
+      totalCapitalWithdrawn: capitalWithdrawn,
     };
   });
 
-  const combinedContributedCapital = ownerSummaries.reduce(
-    (sum, o) => sum + o.totalContributedCapital,
-    0
+  const combinedInvestedCapitalDec = ownerSummaries.reduce(
+    (sum, o) => sum.plus(toDecimal(o.investedCapital)),
+    new Decimal(0)
   );
-  const combinedCurrentCapital = ownerSummaries.reduce(
-    (sum, o) => sum + o.totalCurrentCapital,
-    0
+  const combinedAllTimeProfitDec = ownerSummaries.reduce(
+    (sum, o) => sum.plus(toDecimal(o.allTimeProfit)),
+    new Decimal(0)
   );
-  const combinedNetRealizedPnl = ownerSummaries.reduce(
-    (sum, o) => sum + o.totalNetRealizedPnl,
-    0
+  const combinedAvailableProfitDec = ownerSummaries.reduce(
+    (sum, o) => sum.plus(toDecimal(o.availableProfit)),
+    new Decimal(0)
   );
-  const combinedAvailableProfit = ownerSummaries.reduce(
-    (sum, o) => sum + o.totalAvailableProfitForWithdrawal,
-    0
+  const combinedCurrentCapitalDec = ownerSummaries.reduce(
+    (sum, o) => sum.plus(toDecimal(o.totalCurrentCapital)),
+    new Decimal(0)
   );
+
+  const combinedInvestedCapital = roundToINR(combinedInvestedCapitalDec).toNumber();
+  const combinedAllTimeProfit = roundToINR(combinedAllTimeProfitDec).toNumber();
+  const combinedAvailableProfit = roundToINR(combinedAvailableProfitDec).toNumber();
+  const combinedCurrentCapital = roundToINR(combinedCurrentCapitalDec).toNumber();
 
   return {
     householdId,
     owners: ownerSummaries,
-    combinedContributedCapital,
-    combinedCurrentCapital,
-    combinedNetRealizedPnl,
+    combinedInvestedCapital,
     combinedAvailableProfit,
+    combinedAllTimeProfit,
+    combinedContributedCapital: combinedInvestedCapital,
+    combinedCurrentCapital,
+    combinedNetRealizedPnl: combinedAllTimeProfit,
+    combinedAvailableProfitForWithdrawal: combinedAvailableProfit,
   };
 }
 
@@ -365,10 +430,16 @@ export async function validateWithdrawal(
   const summary = await getHouseholdCapitalSummary(householdId);
   const owner = summary.owners.find((o) => o.portfolioOwnerId === input.portfolioOwnerId);
   const strategyData =
-    input.strategyBucket === 'INTRADAY' ? owner?.intraday : owner?.swing;
+    input.strategyBucket === 'INTRADAY'
+      ? owner?.intraday
+      : input.strategyBucket === 'SWING'
+      ? owner?.swing
+      : undefined;
 
   if (input.withdrawalType === 'PROFIT') {
-    const availableProfit = Number(strategyData?.availableProfitForWithdrawal ?? 0);
+    const availableProfit = Number(
+      (strategyData ? strategyData.availableProfitForWithdrawal : owner?.availableProfit) ?? 0
+    );
     if (input.amount > availableProfit) {
       return {
         valid: false,
@@ -384,28 +455,30 @@ export async function validateWithdrawal(
     };
   } else {
     // CAPITAL withdrawal
-    const contributedCapital = Number(strategyData?.contributedCapital ?? 0);
-    if (input.amount > contributedCapital) {
+    const investedCapital = Number(
+      (strategyData ? strategyData.contributedCapital : owner?.investedCapital) ?? 0
+    );
+    if (input.amount > investedCapital) {
       if (input.overrideCapitalLimit) {
         // Admin explicitly confirmed override
         return {
           valid: true,
-          availableAmount: contributedCapital,
+          availableAmount: investedCapital,
           requestedAmount: input.amount,
           requiresOverrideConfirmation: true,
         };
       }
       return {
         valid: false,
-        availableAmount: contributedCapital,
+        availableAmount: investedCapital,
         requestedAmount: input.amount,
-        rejectionReason: `Withdrawal amount (₹${input.amount.toLocaleString('en-IN')}) exceeds contributed capital (₹${contributedCapital.toLocaleString('en-IN')}). Explicit admin confirmation required to override.`,
+        rejectionReason: `Withdrawal amount (₹${input.amount.toLocaleString('en-IN')}) exceeds current invested capital (₹${investedCapital.toLocaleString('en-IN')}).`,
         requiresOverrideConfirmation: true,
       };
     }
     return {
       valid: true,
-      availableAmount: contributedCapital,
+      availableAmount: investedCapital,
       requestedAmount: input.amount,
     };
   }
@@ -433,7 +506,7 @@ export async function createCapitalTransaction(
     .insert({
       household_id: householdId,
       portfolio_owner_id: input.portfolioOwnerId,
-      strategy_bucket: input.strategyBucket,
+      strategy_bucket: input.strategyBucket || 'INTRADAY',
       tx_type: input.txType,
       amount: input.amount,
       tx_date: input.txDate,
@@ -482,7 +555,7 @@ export async function recordWithdrawal(
     .insert({
       household_id: householdId,
       portfolio_owner_id: input.portfolioOwnerId,
-      strategy_bucket: input.strategyBucket,
+      strategy_bucket: input.strategyBucket || 'INTRADAY',
       tx_type: txType,
       amount: input.amount,
       tx_date: input.txDate,
@@ -501,6 +574,54 @@ export async function recordWithdrawal(
   }
 
   return mapRow(data as CapitalTransactionRow);
+}
+
+/**
+ * Sets initial invested capital for a specific portfolio owner (Husband or Wife).
+ * If initial allocation already exists, records an adjustment; otherwise records initial allocation.
+ */
+export async function setInitialCapital(
+  householdId: string,
+  userId: string,
+  portfolioOwnerId: string,
+  amount: number,
+  notes?: string
+): Promise<CapitalTransaction> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: existing } = await supabase
+    .from('capital_transactions')
+    .select('*')
+    .eq('household_id', householdId)
+    .eq('portfolio_owner_id', portfolioOwnerId)
+    .eq('tx_type', 'INITIAL_ALLOCATION')
+    .is('reversal_of', null)
+    .maybeSingle();
+
+  const today = new Date().toISOString().split('T')[0];
+
+  if (!existing) {
+    return createCapitalTransaction(householdId, userId, {
+      portfolioOwnerId,
+      strategyBucket: 'INTRADAY',
+      txType: 'INITIAL_ALLOCATION',
+      amount,
+      txDate: today,
+      notes: notes || 'Initial invested capital',
+    });
+  }
+
+  const prevAmount = Number(existing.amount);
+  return createCapitalTransaction(householdId, userId, {
+    portfolioOwnerId,
+    strategyBucket: 'INTRADAY',
+    txType: 'CAPITAL_ADJUSTMENT',
+    amount: Math.abs(amount - prevAmount),
+    txDate: today,
+    previousAmount: prevAmount,
+    newAmount: amount,
+    notes: notes || `Adjusted initial capital to ₹${amount.toLocaleString('en-IN')}`,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -573,6 +694,22 @@ export async function reverseCapitalTransaction(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Calculate invested capital.
+ * Specification: Initial Capital + Additional Capital - Capital Withdrawals
+ */
+export function calcInvestedCapital(
+  initialCapital: number,
+  additionalCapital: number,
+  capitalWithdrawals: number
+): number {
+  return toDecimal(initialCapital)
+    .plus(toDecimal(additionalCapital))
+    .minus(toDecimal(capitalWithdrawals))
+    .toDecimalPlaces(2)
+    .toNumber();
+}
+
+/**
  * Calculate available profit for withdrawal.
  * Specification: max(0, cumulative_net_realized_pnl - cumulative_profit_withdrawals)
  */
@@ -580,7 +717,8 @@ export function calcAvailableProfit(
   cumulativeNetRealizedPnl: number,
   cumulativeProfitWithdrawals: number
 ): number {
-  return Math.max(0, cumulativeNetRealizedPnl - cumulativeProfitWithdrawals);
+  const diff = toDecimal(cumulativeNetRealizedPnl).minus(toDecimal(cumulativeProfitWithdrawals));
+  return Decimal.max(0, diff).toDecimalPlaces(2).toNumber();
 }
 
 /**
@@ -592,7 +730,11 @@ export function calcCurrentCapital(
   cumulativeNetRealizedPnl: number,
   cumulativeProfitWithdrawals: number
 ): number {
-  return contributedCapital + cumulativeNetRealizedPnl - cumulativeProfitWithdrawals;
+  return toDecimal(contributedCapital)
+    .plus(toDecimal(cumulativeNetRealizedPnl))
+    .minus(toDecimal(cumulativeProfitWithdrawals))
+    .toDecimalPlaces(2)
+    .toNumber();
 }
 
 /**

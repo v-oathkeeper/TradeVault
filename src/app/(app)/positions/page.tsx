@@ -27,7 +27,10 @@ export default async function PositionsPage() {
         trade_type, direction, quantity, entry_price, exit_price, entry_at, exit_at,
         gross_pnl, total_charges, net_pnl, calculation_status, status, notes,
         initial_stop_loss, current_stop_loss, initial_risk_rupees, initial_risk_per_share,
-        planned_target, planned_rr, r1_price, r2_price, r3_price
+        planned_target, milestone1_target, milestone1_status, milestone1_trailing_sl,
+        milestone2_target, milestone2_status, milestone2_trailing_sl,
+        milestone3_target, milestone3_status, milestone3_trailing_sl,
+        current_trailing_sl, last_reached_milestone, milestones_updated_at
       `)
       .eq('household_id', appContext.householdId)
       .eq('status', 'OPEN')
@@ -76,10 +79,18 @@ export default async function PositionsPage() {
       initialRiskRupees: t.initial_risk_rupees ? Number(t.initial_risk_rupees) : null,
       initialRiskPerShare: t.initial_risk_per_share ? Number(t.initial_risk_per_share) : null,
       plannedTarget: t.planned_target ? Number(t.planned_target) : null,
-      plannedRR: t.planned_rr ? Number(t.planned_rr) : null,
-      r1Price: t.r1_price ? Number(t.r1_price) : null,
-      r2Price: t.r2_price ? Number(t.r2_price) : null,
-      r3Price: t.r3_price ? Number(t.r3_price) : null,
+      milestone1_target: t.milestone1_target ? Number(t.milestone1_target) : null,
+      milestone1_status: t.milestone1_status ?? null,
+      milestone1_trailing_sl: t.milestone1_trailing_sl ? Number(t.milestone1_trailing_sl) : null,
+      milestone2_target: t.milestone2_target ? Number(t.milestone2_target) : null,
+      milestone2_status: t.milestone2_status ?? null,
+      milestone2_trailing_sl: t.milestone2_trailing_sl ? Number(t.milestone2_trailing_sl) : null,
+      milestone3_target: t.milestone3_target ? Number(t.milestone3_target) : null,
+      milestone3_status: t.milestone3_status ?? null,
+      milestone3_trailing_sl: t.milestone3_trailing_sl ? Number(t.milestone3_trailing_sl) : null,
+      current_trailing_sl: t.current_trailing_sl ? Number(t.current_trailing_sl) : null,
+      last_reached_milestone: t.last_reached_milestone ?? null,
+      milestones_updated_at: t.milestones_updated_at ?? null,
       portfolioOwner: person
         ? {
             id: person.id,

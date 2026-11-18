@@ -2,23 +2,37 @@
 
 import React, { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { PlusCircle, ArrowDownCircle, History, LayoutGrid, Scale } from 'lucide-react';
+import {
+  PlusCircle,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  History,
+  LayoutGrid,
+  Heart,
+  Sparkles,
+} from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { CapitalCards } from '@/components/capital/CapitalCards';
 import { CapitalTransactionHistory } from '@/components/capital/CapitalTransactionHistory';
-import { ReconciliationView } from '@/components/capital/ReconciliationView';
-import type { HouseholdCapitalSummary, CapitalTransaction, OwnerCapitalSummary } from '@/types/capital';
+import { useCapitalData } from '@/lib/hooks/useCapitalData';
+import type { HouseholdCapitalSummary, CapitalTransaction } from '@/types/capital';
 
-const ManageCapitalModal = dynamic(
-  () => import('@/components/capital/ManageCapitalModal').then((m) => m.ManageCapitalModal),
-  { ssr: false }
-);
-const RecordWithdrawalModal = dynamic(
-  () => import('@/components/capital/RecordWithdrawalModal').then((m) => m.RecordWithdrawalModal),
+const AddMoneyModal = dynamic(
+  () => import('@/components/capital/AddMoneyModal').then((m) => m.AddMoneyModal),
   { ssr: false }
 );
 
-type Tab = 'overview' | 'history' | 'reconciliation';
+const WithdrawMoneyModal = dynamic(
+  () => import('@/components/capital/WithdrawMoneyModal').then((m) => m.WithdrawMoneyModal),
+  { ssr: false }
+);
+
+const SetInitialCapitalModal = dynamic(
+  () => import('@/components/capital/SetInitialCapitalModal').then((m) => m.SetInitialCapitalModal),
+  { ssr: false }
+);
+
+type Tab = 'overview' | 'history';
 
 interface CapitalPageClientProps {
   initialSummary: HouseholdCapitalSummary;
@@ -34,35 +48,53 @@ export function CapitalPageClient({
   isAdmin,
 }: CapitalPageClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<Tab>('overview');
-  const [showManageModal, setShowManageModal] = useState(false);
-  const [showWithdrawalModal, setShowWithdrawalModal] = useState(false);
-  const [preselectedOwnerId, setPreselectedOwnerId] = useState<string | undefined>();
+  const { summary, invalidateCapitalCache, husbandSummary, wifeSummary } = useCapitalData(initialSummary);
 
-  const handleManageCapital = useCallback((ownerId: string) => {
+  const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [showAddMoney, setShowAddMoney] = useState(false);
+  const [showWithdrawMoney, setShowWithdrawMoney] = useState(false);
+  const [showSetInitialCapital, setShowSetInitialCapital] = useState(false);
+  const [preselectedOwnerId, setPreselectedOwnerId] = useState<string | undefined>();
+  const [defaultWithdrawalType, setDefaultWithdrawalType] = useState<'PROFIT' | 'CAPITAL'>('PROFIT');
+
+  const handleAddMoney = useCallback((ownerId?: string) => {
     setPreselectedOwnerId(ownerId);
-    setShowManageModal(true);
+    setShowAddMoney(true);
   }, []);
 
-  const handleRecordWithdrawal = useCallback((ownerId: string) => {
+  const handleWithdrawMoney = useCallback((ownerId?: string, type: 'PROFIT' | 'CAPITAL' = 'PROFIT') => {
     setPreselectedOwnerId(ownerId);
-    setShowWithdrawalModal(true);
+    setDefaultWithdrawalType(type);
+    setShowWithdrawMoney(true);
+  }, []);
+
+  const handleSetInitialCapital = useCallback(() => {
+    setShowSetInitialCapital(true);
   }, []);
 
   const handleSuccess = useCallback(() => {
+    invalidateCapitalCache();
     router.refresh();
-  }, [router]);
+  }, [invalidateCapitalCache, router]);
+
+  const activeSummary = summary || initialSummary;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
-      {/* Page header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border)] pb-4">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-[var(--foreground)]">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border)] pb-5">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-rose-500 font-semibold text-xs tracking-wider uppercase flex items-center gap-1">
+              <Heart className="w-3.5 h-3.5 fill-current" />
+              Couple's Finance
+            </span>
+          </div>
+          <h2 className="text-2xl font-bold tracking-tight text-[var(--foreground)]">
             Capital &amp; Profit Management
           </h2>
           <p className="text-xs text-[var(--muted)]">
-            Track contributed capital, realized P&amp;L, and withdrawals per portfolio owner and strategy
+            Manage Husband &amp; Wife capital records, add money, and withdraw profits or capital
           </p>
         </div>
 
@@ -70,73 +102,73 @@ export function CapitalPageClient({
           <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
-              onClick={() => { setPreselectedOwnerId(undefined); setShowManageModal(true); }}
-              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-[var(--card)] hover:bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] font-semibold text-xs transition-colors shadow-sm"
+              onClick={handleSetInitialCapital}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-[var(--card)] hover:bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] font-semibold text-xs transition-colors shadow-sm"
             >
-              <PlusCircle className="w-4 h-4 text-blue-500" />
-              <span>Manage Capital</span>
+              <Sparkles className="w-4 h-4 text-rose-500" />
+              <span>Initial Capital</span>
             </button>
             <button
               type="button"
-              onClick={() => { setPreselectedOwnerId(undefined); setShowWithdrawalModal(true); }}
-              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-semibold text-xs shadow-sm transition-all"
+              onClick={() => handleAddMoney()}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-xs shadow-sm transition-all"
+            >
+              <ArrowUpCircle className="w-4 h-4" />
+              <span>Add Money</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleWithdrawMoney()}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold text-xs shadow-sm transition-all"
             >
               <ArrowDownCircle className="w-4 h-4" />
-              <span>Record Withdrawal</span>
+              <span>Withdraw Money</span>
             </button>
           </div>
         )}
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--card)] border border-[var(--border)] w-fit">
+      <div className="flex items-center gap-1 p-1 rounded-2xl bg-[var(--background)] border border-[var(--border)] w-fit text-xs font-semibold">
         <button
+          type="button"
           onClick={() => setActiveTab('overview')}
-          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl transition-all ${
             activeTab === 'overview'
-              ? 'bg-[var(--background)] text-[var(--foreground)] shadow-sm'
+              ? 'bg-[var(--card)] text-rose-500 font-bold shadow-sm border border-[var(--border)]'
               : 'text-[var(--muted)] hover:text-[var(--foreground)]'
           }`}
         >
           <LayoutGrid className="w-3.5 h-3.5" />
-          Overview
+          <span>Capital Overview</span>
         </button>
         <button
+          type="button"
           onClick={() => setActiveTab('history')}
-          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl transition-all ${
             activeTab === 'history'
-              ? 'bg-[var(--background)] text-[var(--foreground)] shadow-sm'
+              ? 'bg-[var(--card)] text-rose-500 font-bold shadow-sm border border-[var(--border)]'
               : 'text-[var(--muted)] hover:text-[var(--foreground)]'
           }`}
         >
           <History className="w-3.5 h-3.5" />
-          History
+          <span>Transaction History</span>
           {initialTransactionTotal > 0 && (
-            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-500 text-[9px] font-bold">
+            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-rose-500/10 text-rose-500 text-[10px] font-bold">
               {initialTransactionTotal}
             </span>
           )}
-        </button>
-        <button
-          onClick={() => setActiveTab('reconciliation')}
-          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${
-            activeTab === 'reconciliation'
-              ? 'bg-[var(--background)] text-[var(--foreground)] shadow-sm'
-              : 'text-[var(--muted)] hover:text-[var(--foreground)]'
-          }`}
-        >
-          <Scale className="w-3.5 h-3.5" />
-          Reconciliation
         </button>
       </div>
 
       {/* Content */}
       {activeTab === 'overview' && (
         <CapitalCards
-          summary={initialSummary}
+          summary={activeSummary}
           isAdmin={isAdmin}
-          onManageCapital={handleManageCapital}
-          onRecordWithdrawal={handleRecordWithdrawal}
+          onAddMoney={handleAddMoney}
+          onWithdrawMoney={handleWithdrawMoney}
+          onSetInitialCapital={handleSetInitialCapital}
         />
       )}
 
@@ -147,29 +179,31 @@ export function CapitalPageClient({
         />
       )}
 
-      {activeTab === 'reconciliation' && (
-        <ReconciliationView
-          summary={initialSummary}
-          transactions={initialTransactions}
-        />
-      )}
-
-      {/* Modals */}
+      {/* Admin Modals */}
       {isAdmin && (
         <>
-          <ManageCapitalModal
-            open={showManageModal}
-            owners={initialSummary.owners}
-            initialOwnerId={preselectedOwnerId}
-            onClose={() => setShowManageModal(false)}
+          <AddMoneyModal
+            open={showAddMoney}
+            onClose={() => setShowAddMoney(false)}
             onSuccess={handleSuccess}
+            preselectedOwnerId={preselectedOwnerId}
           />
-          <RecordWithdrawalModal
-            open={showWithdrawalModal}
-            owners={initialSummary.owners}
-            initialOwnerId={preselectedOwnerId}
-            onClose={() => setShowWithdrawalModal(false)}
+          <WithdrawMoneyModal
+            open={showWithdrawMoney}
+            onClose={() => setShowWithdrawMoney(false)}
             onSuccess={handleSuccess}
+            summary={activeSummary}
+            preselectedOwnerId={preselectedOwnerId}
+            defaultWithdrawalType={defaultWithdrawalType}
+          />
+          <SetInitialCapitalModal
+            open={showSetInitialCapital}
+            onClose={() => setShowSetInitialCapital(false)}
+            onSuccess={handleSuccess}
+            husbandInitial={husbandSummary?.initialCapital ?? 0}
+            wifeInitial={wifeSummary?.initialCapital ?? 0}
+            husbandId={husbandSummary?.portfolioOwnerId}
+            wifeId={wifeSummary?.portfolioOwnerId}
           />
         </>
       )}

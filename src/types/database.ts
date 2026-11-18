@@ -380,6 +380,18 @@ export interface Database {
           max_favorable_excursion: number | null;
           realized_r_multiple: number | null;
           gross_r_multiple: number | null;
+          milestone1_target: number | null;
+          milestone1_status: string | null;
+          milestone1_trailing_sl: number | null;
+          milestone2_target: number | null;
+          milestone2_status: string | null;
+          milestone2_trailing_sl: number | null;
+          milestone3_target: number | null;
+          milestone3_status: string | null;
+          milestone3_trailing_sl: number | null;
+          current_trailing_sl: number | null;
+          last_reached_milestone: string | null;
+          milestones_updated_at: string | null;
         };
         Insert: {
           id?: string;
@@ -421,6 +433,18 @@ export interface Database {
           max_favorable_excursion?: number | null;
           realized_r_multiple?: number | null;
           gross_r_multiple?: number | null;
+          milestone1_target?: number | null;
+          milestone1_status?: string | null;
+          milestone1_trailing_sl?: number | null;
+          milestone2_target?: number | null;
+          milestone2_status?: string | null;
+          milestone2_trailing_sl?: number | null;
+          milestone3_target?: number | null;
+          milestone3_status?: string | null;
+          milestone3_trailing_sl?: number | null;
+          current_trailing_sl?: number | null;
+          last_reached_milestone?: string | null;
+          milestones_updated_at?: string | null;
         };
         Update: {
           id?: string;
@@ -462,6 +486,18 @@ export interface Database {
           max_favorable_excursion?: number | null;
           realized_r_multiple?: number | null;
           gross_r_multiple?: number | null;
+          milestone1_target?: number | null;
+          milestone1_status?: string | null;
+          milestone1_trailing_sl?: number | null;
+          milestone2_target?: number | null;
+          milestone2_status?: string | null;
+          milestone2_trailing_sl?: number | null;
+          milestone3_target?: number | null;
+          milestone3_status?: string | null;
+          milestone3_trailing_sl?: number | null;
+          current_trailing_sl?: number | null;
+          last_reached_milestone?: string | null;
+          milestones_updated_at?: string | null;
         };
         Relationships: [
           {
@@ -631,6 +667,74 @@ export interface Database {
         Relationships: [
           {
             foreignKeyName: 'stop_loss_history_trade_id_fkey';
+            columns: ['trade_id'];
+            isOneToOne: false;
+            referencedRelation: 'trades';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      trade_milestone_history: {
+        Row: {
+          id: string;
+          trade_id: string;
+          milestone1_target: number | null;
+          milestone1_status: string | null;
+          milestone1_trailing_sl: number | null;
+          milestone2_target: number | null;
+          milestone2_status: string | null;
+          milestone2_trailing_sl: number | null;
+          milestone3_target: number | null;
+          milestone3_status: string | null;
+          milestone3_trailing_sl: number | null;
+          current_trailing_sl: number | null;
+          last_reached_milestone: string | null;
+          notes: string | null;
+          raw_gemini_input: Json | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          trade_id: string;
+          milestone1_target?: number | null;
+          milestone1_status?: string | null;
+          milestone1_trailing_sl?: number | null;
+          milestone2_target?: number | null;
+          milestone2_status?: string | null;
+          milestone2_trailing_sl?: number | null;
+          milestone3_target?: number | null;
+          milestone3_status?: string | null;
+          milestone3_trailing_sl?: number | null;
+          current_trailing_sl?: number | null;
+          last_reached_milestone?: string | null;
+          notes?: string | null;
+          raw_gemini_input?: Json | null;
+          created_by: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          trade_id?: string;
+          milestone1_target?: number | null;
+          milestone1_status?: string | null;
+          milestone1_trailing_sl?: number | null;
+          milestone2_target?: number | null;
+          milestone2_status?: string | null;
+          milestone2_trailing_sl?: number | null;
+          milestone3_target?: number | null;
+          milestone3_status?: string | null;
+          milestone3_trailing_sl?: number | null;
+          current_trailing_sl?: number | null;
+          last_reached_milestone?: string | null;
+          notes?: string | null;
+          raw_gemini_input?: Json | null;
+          created_by?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'trade_milestone_history_trade_id_fkey';
             columns: ['trade_id'];
             isOneToOne: false;
             referencedRelation: 'trades';

@@ -94,7 +94,7 @@ export default async function DashboardPage() {
       initialStopLoss: t.initial_stop_loss ? Number(t.initial_stop_loss) : null,
       currentStopLoss: t.current_stop_loss ? Number(t.current_stop_loss) : null,
       initialRiskRupees: t.initial_risk_rupees ? Number(t.initial_risk_rupees) : null,
-      realizedRMultiple: t.realized_r_multiple ? Number(t.realized_r_multiple) : null,
+      realizedRMultiple: null,
       portfolioOwner: person
         ? {
             id: person.id,

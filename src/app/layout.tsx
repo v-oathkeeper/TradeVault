@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { ThemeProvider } from '@/components/providers/ThemeProvider';
+import { QueryProvider } from '@/components/providers/QueryProvider';
 import { Toaster } from 'sonner';
 
 const inter = Inter({
@@ -64,16 +65,18 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col font-sans bg-[var(--background)] text-[var(--foreground)] antialiased">
         <ThemeProvider>
-          {children}
-          <Toaster
-            position="top-right"
-            richColors
-            closeButton
-            theme="system"
-            toastOptions={{
-              className: 'font-sans text-sm',
-            }}
-          />
+          <QueryProvider>
+            {children}
+            <Toaster
+              position="top-right"
+              richColors
+              closeButton
+              theme="system"
+              toastOptions={{
+                className: 'font-sans text-sm',
+              }}
+            />
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>

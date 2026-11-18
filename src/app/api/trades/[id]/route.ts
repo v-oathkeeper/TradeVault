@@ -101,14 +101,11 @@ export async function PUT(
     if (validated.strategyName !== undefined) updateData.strategy_name = validated.strategyName;
     if (validated.plannedTarget !== undefined) updateData.planned_target = validated.plannedTarget;
 
-    // ── Recompute R-multiple fields if stop-loss or entry changed ──
-    const { calculateInitialRisk, calculateRealizedR } = await import('@/lib/calculations/r-multiple');
-
+    // ── Recompute basic risk fields if stop-loss or entry changed (no R-multiples) ──
     const effectiveEntry = (validated.entryPrice ?? Number(existing.entry_price));
     const effectiveStop = (validated.initialStopLoss ?? Number(existing.initial_stop_loss));
     const effectiveQty = (validated.quantity ?? existing.quantity);
     const effectiveDir = (validated.direction ?? existing.direction) as 'LONG' | 'SHORT';
-    const effectiveTarget = (validated.plannedTarget ?? (existing.planned_target ? Number(existing.planned_target) : null));
 
     if (validated.initialStopLoss) {
       updateData.initial_stop_loss = validated.initialStopLoss;
@@ -116,23 +113,14 @@ export async function PUT(
     }
 
     if (effectiveStop && effectiveEntry) {
-      const riskCalc = calculateInitialRisk({
-        entryPrice: effectiveEntry,
-        initialStopLoss: effectiveStop,
-        quantity: effectiveQty,
-        direction: effectiveDir,
-        plannedTarget: effectiveTarget,
-      });
-
-      if (riskCalc) {
-        updateData.initial_risk_per_share = riskCalc.riskPerShare;
-        updateData.initial_risk_rupees = riskCalc.riskRupees;
-        updateData.initial_risk_pct = riskCalc.riskPct;
-        updateData.planned_rr = riskCalc.plannedRR;
-        updateData.r1_price = riskCalc.r1Price;
-        updateData.r2_price = riskCalc.r2Price;
-        updateData.r3_price = riskCalc.r3Price;
-      }
+      const riskPerShare = Math.abs(effectiveEntry - effectiveStop);
+      updateData.initial_risk_per_share = riskPerShare;
+      updateData.initial_risk_rupees = riskPerShare * effectiveQty;
+      updateData.initial_risk_pct = effectiveEntry > 0 ? (riskPerShare / effectiveEntry) * 100 : null;
+      updateData.planned_rr = null;
+      updateData.r1_price = null;
+      updateData.r2_price = null;
+      updateData.r3_price = null;
     }
 
     // Recalculate P&L and fees if now closed
@@ -188,21 +176,12 @@ export async function PUT(
         updateData.net_pnl = netPnl;
         updateData.charges_breakdown = { ...charges, grossPnl, netPnl };
 
-        // Compute realized R on close
-        const riskRupees = effectiveStop && effectiveEntry
-          ? Math.abs(effectiveEntry - effectiveStop) * effectiveQty
-          : null;
-
-        if (riskRupees && riskRupees > 0) {
-          const rResult = calculateRealizedR({ netPnl, grossPnl, riskRupees });
-          if (rResult) {
-            updateData.realized_r_multiple = rResult.realizedR;
-            updateData.gross_r_multiple = rResult.grossR;
-          }
-        }
+        // R-multiples removed per requirement
+        updateData.realized_r_multiple = null;
+        updateData.gross_r_multiple = null;
       }
     } else if (!hasExit) {
-      // Trade re-opened — clear realized R
+      // Trade re-opened
       updateData.realized_r_multiple = null;
       updateData.gross_r_multiple = null;
     }

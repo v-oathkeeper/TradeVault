@@ -38,10 +38,6 @@ const MonthlyBarChart = dynamic(
 import { PnlDisplay } from '@/components/ui/PnlDisplay';
 import { useUser } from '@/components/providers/UserContext';
 import { formatINR, cn } from '@/lib/utils';
-import {
-  bucketRMultiples,
-  calculateRExpectancy,
-} from '@/lib/calculations/r-multiple';
 import type { Trade, MonthlyPnl } from '@/types/app';
 
 interface AnalyticsClientProps {
@@ -105,64 +101,6 @@ export function AnalyticsClient({ initialTrades }: AnalyticsClientProps) {
       avgWin,
       avgLoss,
       profitFactor,
-    };
-  }, [closedTrades]);
-
-  // R-Multiple Analytics
-  const rStats = useMemo(() => {
-    const tradesWithR = closedTrades.filter(
-      (t) => t.realizedRMultiple != null && t.initialRiskRupees != null && t.initialRiskRupees > 0
-    );
-
-    if (tradesWithR.length === 0) return null;
-
-    const rValues = tradesWithR.map((t) => t.realizedRMultiple!);
-    const avgR = rValues.reduce((a, b) => a + b, 0) / rValues.length;
-
-    const winRValues = rValues.filter((r) => r > 0);
-    const lossRValues = rValues.filter((r) => r < 0);
-
-    const avgWinR = winRValues.length > 0
-      ? winRValues.reduce((a, b) => a + b, 0) / winRValues.length
-      : 0;
-    const avgLossR = lossRValues.length > 0
-      ? Math.abs(lossRValues.reduce((a, b) => a + b, 0) / lossRValues.length)
-      : 0;
-
-    const winRate = rValues.length > 0 ? winRValues.length / rValues.length : 0;
-    const expectancy = calculateRExpectancy(winRate, avgWinR, avgLossR);
-
-    // R Distribution histogram
-    const distribution = bucketRMultiples(rValues);
-
-    // Strategy performance breakdown
-    const strategyMap = new Map<string, { rValues: number[]; trades: number }>();
-    tradesWithR.forEach((t) => {
-      const key = t.strategyName ?? 'Untagged';
-      const existing = strategyMap.get(key) ?? { rValues: [], trades: 0 };
-      existing.rValues.push(t.realizedRMultiple!);
-      existing.trades += 1;
-      strategyMap.set(key, existing);
-    });
-
-    const strategyPerformance = Array.from(strategyMap.entries())
-      .map(([name, data]) => ({
-        name,
-        avgR: data.rValues.reduce((a, b) => a + b, 0) / data.rValues.length,
-        trades: data.trades,
-        winRate:
-          (data.rValues.filter((r) => r > 0).length / data.rValues.length) * 100,
-      }))
-      .sort((a, b) => b.avgR - a.avgR);
-
-    return {
-      count: tradesWithR.length,
-      avgR,
-      avgWinR,
-      avgLossR,
-      expectancy,
-      distribution,
-      strategyPerformance,
     };
   }, [closedTrades]);
 
@@ -306,147 +244,8 @@ export function AnalyticsClient({ initialTrades }: AnalyticsClientProps) {
         />
       </div>
 
-      {/* R-Multiple KPI Row */}
-      {rStats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-          <div className="p-4 rounded-2xl bg-[var(--card)] border border-indigo-500/30 shadow-sm space-y-1 col-span-2 md:col-span-1">
-            <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-indigo-400" />
-              <span className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Avg R-Multiple</span>
-            </div>
-            <div className={cn(
-              'text-2xl font-bold font-mono',
-              rStats.avgR >= 1 ? 'text-emerald-400'
-                : rStats.avgR >= 0 ? 'text-lime-400'
-                : rStats.avgR >= -1 ? 'text-orange-400'
-                : 'text-rose-400'
-            )}>
-              {rStats.avgR >= 0 ? '+' : ''}{rStats.avgR.toFixed(2)}R
-            </div>
-            <div className="text-[11px] text-[var(--muted)]">{rStats.count} trades measured</div>
-          </div>
-          <div className="p-4 rounded-2xl bg-[var(--card)] border border-cyan-500/30 shadow-sm space-y-1 col-span-2 md:col-span-1">
-            <div className="flex items-center gap-2">
-              <Target className="w-4 h-4 text-cyan-400" />
-              <span className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">R-Expectancy</span>
-            </div>
-            <div className={cn(
-              'text-2xl font-bold font-mono',
-              rStats.expectancy > 0 ? 'text-emerald-400' : 'text-rose-400'
-            )}>
-              {rStats.expectancy >= 0 ? '+' : ''}{rStats.expectancy.toFixed(3)}R
-            </div>
-            <div className="text-[11px] text-[var(--muted)]">Expected return per trade in R</div>
-          </div>
-          <div className="p-4 rounded-2xl bg-[var(--card)] border border-emerald-500/20 shadow-sm space-y-1">
-            <span className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider block">Avg Win R</span>
-            <div className="text-2xl font-bold font-mono text-emerald-400">+{rStats.avgWinR.toFixed(2)}R</div>
-          </div>
-          <div className="p-4 rounded-2xl bg-[var(--card)] border border-rose-500/20 shadow-sm space-y-1">
-            <span className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider block">Avg Loss R</span>
-            <div className="text-2xl font-bold font-mono text-rose-400">-{rStats.avgLossR.toFixed(2)}R</div>
-          </div>
-        </div>
-      )}
-
       {/* Monthly chart */}
       <MonthlyBarChart data={monthlyData} />
-
-      {/* R-Distribution Histogram */}
-      {rStats && rStats.distribution.some((d) => d.count > 0) && (
-        <div className="p-5 rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-sm space-y-4">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-indigo-400" />
-            <div>
-              <h3 className="font-bold text-sm text-[var(--foreground)]">R-Multiple Distribution</h3>
-              <p className="text-xs text-[var(--muted)]">How many closed trades fell in each R-multiple bucket</p>
-            </div>
-          </div>
-          <ResponsiveContainer width="100%" height={160}>
-            <BarChart
-              data={rStats.distribution.map((d) => ({
-                name: d.bucket.label,
-                count: d.count,
-                fill: d.bucket.color,
-              }))}
-              margin={{ top: 4, right: 8, bottom: 4, left: 0 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis
-                dataKey="name"
-                tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
-                axisLine={false}
-                tickLine={false}
-                allowDecimals={false}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: 'var(--card)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 12,
-                  fontSize: 11,
-                }}
-                formatter={(value) => [`${value} trade${Number(value) !== 1 ? 's' : ''}`, 'Count']}
-              />
-              <Bar dataKey="count" radius={[6, 6, 0, 0]}>
-                {rStats.distribution.map((entry, index) => (
-                  <Cell key={index} fill={entry.bucket.color} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Strategy R-Performance */}
-      {rStats && rStats.strategyPerformance.length > 0 && (
-        <div className="p-5 rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-sm space-y-4">
-          <div className="flex items-center gap-2">
-            <Target className="w-4 h-4 text-purple-400" />
-            <div>
-              <h3 className="font-bold text-sm text-[var(--foreground)]">Strategy R-Performance</h3>
-              <p className="text-xs text-[var(--muted)]">Average R-multiple by strategy/setup name</p>
-            </div>
-          </div>
-          <div className="space-y-2.5">
-            {rStats.strategyPerformance.map((s) => {
-              const barWidth = Math.min(Math.abs(s.avgR) * 25, 100);
-              return (
-                <div key={s.name} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-[var(--foreground)] flex items-center gap-1.5">
-                      <span className="text-purple-400">#{s.name}</span>
-                      <span className="text-[10px] text-[var(--muted)] font-normal">{s.trades} trades · {s.winRate.toFixed(0)}% win</span>
-                    </span>
-                    <span className={cn(
-                      'font-bold font-mono text-xs',
-                      s.avgR >= 1 ? 'text-emerald-400'
-                        : s.avgR >= 0 ? 'text-lime-400'
-                        : 'text-rose-400'
-                    )}>
-                      {s.avgR >= 0 ? '+' : ''}{s.avgR.toFixed(2)}R
-                    </span>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-[var(--background)] overflow-hidden">
-                    <div
-                      className={cn(
-                        'h-full rounded-full transition-all',
-                        s.avgR >= 0 ? 'bg-emerald-500' : 'bg-rose-500'
-                      )}
-                      style={{ width: `${barWidth}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Segment Breakdown: Person Comparison, Broker Comparison, Product Comparison */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

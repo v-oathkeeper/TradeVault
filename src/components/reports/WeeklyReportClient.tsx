@@ -181,11 +181,10 @@ Summary Metrics:
 - Total Broker & Statutory Charges: ₹${report.summary.total_charges.toFixed(2)}
 - Net Realized P&L: ₹${report.summary.net_realized_pnl.toFixed(2)}
 - Profit Factor: ${report.summary.profit_factor !== null ? report.summary.profit_factor.toFixed(2) : 'N/A'}
-- Realized R-Multiple: ${report.summary.average_realized_r_multiple !== null ? report.summary.average_realized_r_multiple.toFixed(2) + 'R' : 'N/A'}
 - Expectancy: ₹${report.summary.expectancy !== null ? report.summary.expectancy.toFixed(2) : 'N/A'} per trade
 
 AI Review Focus:
-- Negative R Trades: ${report.ai_review.trades_with_negative_r.length}
+- Losing Trades: ${report.summary.losing_trades}
 - Risk Increased After Entry: ${report.ai_review.trades_where_risk_increased.length}
 - Missing Rationale: ${report.ai_review.missing_rationales.length} trades
 - Repeated Symbols: ${report.ai_review.repeated_symbols.map((s) => `${s.symbol} (${s.count}x)`).join(', ') || 'None'}
@@ -408,7 +407,7 @@ ${JSON.stringify(report, null, 2)}`;
             Compiling weekly trading report...
           </p>
           <p className="text-xs text-[var(--muted)]">
-            Analyzing executions, fee breakdowns, R-multiples, and stop-loss decisions
+            Analyzing executions, fee breakdowns, risk metrics, and stop-loss decisions
           </p>
         </div>
       ) : !report ? (
@@ -492,18 +491,18 @@ ${JSON.stringify(report, null, 2)}`;
               </div>
             </div>
 
-            {/* Realized R-Multiple */}
+            {/* Expectancy */}
             <div className="p-4 rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-xs">
               <div className="text-[11px] font-medium text-[var(--muted)] mb-1">
-                Avg Realized R
+                Expectancy / Trade
               </div>
               <div
                 className={`text-lg sm:text-xl font-bold tracking-tight ${
-                  (report.summary.average_realized_r_multiple ?? 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'
+                  (report.summary.expectancy ?? 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'
                 }`}
               >
-                {report.summary.average_realized_r_multiple !== null
-                  ? `${report.summary.average_realized_r_multiple >= 0 ? '+' : ''}${report.summary.average_realized_r_multiple.toFixed(2)}R`
+                {report.summary.expectancy !== null
+                  ? `${report.summary.expectancy >= 0 ? '+' : ''}₹${report.summary.expectancy.toFixed(0)}`
                   : 'N/A'}
               </div>
               <div className="text-[10px] text-[var(--muted)] mt-1 truncate">
@@ -601,18 +600,6 @@ ${JSON.stringify(report, null, 2)}`;
                     <span className="text-[var(--muted)]">Largest Loser</span>
                     <span className="font-semibold text-rose-500">
                       {report.summary.largest_loser !== null ? `${report.summary.largest_loser.symbol} (₹${report.summary.largest_loser.net_pnl.toFixed(0)})` : 'N/A'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-[var(--border)]/40">
-                    <span className="text-[var(--muted)]">Avg Winning R</span>
-                    <span className="font-semibold text-emerald-500">
-                      {report.summary.average_winning_r !== null ? `+${report.summary.average_winning_r.toFixed(2)}R` : 'N/A'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-[var(--border)]/40">
-                    <span className="text-[var(--muted)]">Avg Losing R</span>
-                    <span className="font-semibold text-rose-500">
-                      {report.summary.average_losing_r !== null ? `${report.summary.average_losing_r.toFixed(2)}R` : 'N/A'}
                     </span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-[var(--border)]/40">
@@ -762,12 +749,12 @@ ${JSON.stringify(report, null, 2)}`;
                   </div>
                 </div>
                 <div className="p-4 rounded-2xl bg-[var(--card)] border border-[var(--border)]">
-                  <div className="text-[11px] text-[var(--muted)] mb-1">Avg Realized R</div>
+                  <div className="text-[11px] text-[var(--muted)] mb-1">Profit Factor</div>
                   <div className="text-xl font-bold text-[var(--foreground)]">
-                    {report.intraday.summary.average_realized_r_multiple !== null ? `${report.intraday.summary.average_realized_r_multiple.toFixed(2)}R` : 'N/A'}
+                    {report.intraday.summary.profit_factor !== null ? report.intraday.summary.profit_factor.toFixed(2) : 'N/A'}
                   </div>
                   <div className="text-[10px] text-[var(--muted)] mt-1">
-                    Profit Factor: {report.intraday.summary.profit_factor !== null ? report.intraday.summary.profit_factor.toFixed(2) : 'N/A'}
+                    Win Rate: {report.intraday.summary.win_rate !== null ? `${report.intraday.summary.win_rate.toFixed(1)}%` : 'N/A'}
                   </div>
                 </div>
                 <div className="p-4 rounded-2xl bg-[var(--card)] border border-[var(--border)]">
@@ -832,9 +819,9 @@ ${JSON.stringify(report, null, 2)}`;
                   </div>
                 </div>
                 <div className="p-4 rounded-2xl bg-[var(--card)] border border-[var(--border)]">
-                  <div className="text-[11px] text-[var(--muted)] mb-1">Avg Realized R</div>
+                  <div className="text-[11px] text-[var(--muted)] mb-1">Profit Factor</div>
                   <div className="text-xl font-bold text-[var(--foreground)]">
-                    {report.swing.summary.average_realized_r_multiple !== null ? `${report.swing.summary.average_realized_r_multiple.toFixed(2)}R` : 'N/A'}
+                    {report.swing.summary.profit_factor !== null ? report.swing.summary.profit_factor.toFixed(2) : 'N/A'}
                   </div>
                   <div className="text-[10px] text-[var(--muted)] mt-1">
                     Duration: {report.swing.summary.average_holding_days !== null ? `${report.swing.summary.average_holding_days.toFixed(1)} days` : 'N/A'}
@@ -849,45 +836,20 @@ ${JSON.stringify(report, null, 2)}`;
                 </div>
               </div>
 
-              {/* R-Distribution & Milestones Reached */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-5 rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-xs space-y-4">
-                  <h3 className="text-sm font-bold text-[var(--foreground)] flex items-center gap-2">
-                    <Target className="w-4 h-4 text-blue-500" />
-                    <span>Realized R-Multiple Distribution</span>
-                  </h3>
-                  <div className="space-y-2 text-xs">
-                    {report.swing.summary.r_distribution.map((bucket) => (
-                      <div key={bucket.range} className="flex justify-between p-2 rounded-lg bg-[var(--background)] border border-[var(--border)]/60">
-                        <span className="font-semibold text-[var(--foreground)]">{bucket.range}</span>
-                        <span className="font-bold">{bucket.count}</span>
-                      </div>
-                    ))}
+              {/* Stop Discipline & Trailing Protection */}
+              <div className="p-5 rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-xs space-y-4">
+                <h3 className="text-sm font-bold text-[var(--foreground)] flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-500" />
+                  <span>Stop Discipline & Trailing Protection</span>
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="flex justify-between p-3 rounded-lg bg-[var(--background)] border border-[var(--border)]/60">
+                    <span className="text-[var(--foreground)] font-medium">Trades Stopped at Breakeven / Profit</span>
+                    <span className="font-bold text-emerald-500">{report.swing.summary.trades_stopped_at_breakeven_or_profit}</span>
                   </div>
-                </div>
-
-                <div className="p-5 rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-xs space-y-4">
-                  <h3 className="text-sm font-bold text-[var(--foreground)] flex items-center gap-2">
-                    <Check className="w-4 h-4 text-emerald-500" />
-                    <span>Targets Reached & Stop Discipline</span>
-                  </h3>
-                  <div className="space-y-2 text-xs">
-                    <div className="flex justify-between p-2 rounded-lg bg-[var(--background)] border border-[var(--border)]/60">
-                      <span className="text-[var(--foreground)] font-medium">Trades Reaching +1R</span>
-                      <span className="font-bold text-blue-500">{report.swing.summary.trades_reaching_r_targets.r1_reached}</span>
-                    </div>
-                    <div className="flex justify-between p-2 rounded-lg bg-[var(--background)] border border-[var(--border)]/60">
-                      <span className="text-[var(--foreground)] font-medium">Trades Reaching +2R</span>
-                      <span className="font-bold text-emerald-500">{report.swing.summary.trades_reaching_r_targets.r2_reached}</span>
-                    </div>
-                    <div className="flex justify-between p-2 rounded-lg bg-[var(--background)] border border-[var(--border)]/60">
-                      <span className="text-[var(--foreground)] font-medium">Trades Reaching +3R</span>
-                      <span className="font-bold text-purple-500">{report.swing.summary.trades_reaching_r_targets.r3_reached}</span>
-                    </div>
-                    <div className="flex justify-between p-2 rounded-lg bg-[var(--background)] border border-[var(--border)]/60">
-                      <span className="text-[var(--foreground)] font-medium">Trades Stopped at Breakeven / Profit</span>
-                      <span className="font-bold text-emerald-500">{report.swing.summary.trades_stopped_at_breakeven_or_profit}</span>
-                    </div>
+                  <div className="flex justify-between p-3 rounded-lg bg-[var(--background)] border border-[var(--border)]/60">
+                    <span className="text-[var(--foreground)] font-medium">Estimated Protected Profit</span>
+                    <span className="font-bold text-emerald-500">+₹{report.swing.summary.estimated_protected_profit.toFixed(0)}</span>
                   </div>
                 </div>
               </div>
@@ -970,9 +932,7 @@ ${JSON.stringify(report, null, 2)}`;
                                 {netPnl !== null ? `${netPnl >= 0 ? '+' : ''}₹${netPnl.toFixed(2)}` : 'OPEN'}
                               </div>
                               <div className="text-[10px] text-[var(--muted)]">
-                                {trade.realized_r_multiple !== null
-                                  ? `${trade.realized_r_multiple >= 0 ? '+' : ''}${trade.realized_r_multiple.toFixed(2)}R`
-                                  : `Risk: ₹${trade.initial_total_risk ? trade.initial_total_risk.toFixed(0) : '0'}`}
+                                Risk: ₹{trade.initial_total_risk ? trade.initial_total_risk.toFixed(0) : '0'}
                               </div>
                             </div>
 
@@ -1056,7 +1016,6 @@ ${JSON.stringify(report, null, 2)}`;
                                         {sl.notes && <span className="text-[10px] text-[var(--muted)] block">{sl.notes}</span>}
                                       </div>
                                       <div className="text-right text-[10px] text-[var(--muted)]">
-                                        <div>{sl.r_multiple_at_update !== null ? `${sl.r_multiple_at_update.toFixed(2)}R` : ''}</div>
                                         <div>{new Date(sl.created_at).toLocaleDateString('en-IN')}</div>
                                       </div>
                                     </div>
@@ -1122,23 +1081,23 @@ ${JSON.stringify(report, null, 2)}`;
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
-                {/* Negative R Trades */}
+                {/* Losing Trades */}
                 <div className="p-5 rounded-2xl bg-[var(--card)] border border-[var(--border)] space-y-3">
                   <h4 className="font-bold text-[var(--foreground)] text-sm flex items-center gap-2">
                     <TrendingDown className="w-4 h-4 text-rose-500" />
-                    <span>Negative R Trades ({report.ai_review.trades_with_negative_r.length})</span>
+                    <span>Losing Trades ({report.ai_review.trades_with_negative_r.length})</span>
                   </h4>
                   {report.ai_review.trades_with_negative_r.length === 0 ? (
-                    <p className="text-[var(--muted)]">No trades closed with negative R.</p>
+                    <p className="text-[var(--muted)]">No closed losing trades this week.</p>
                   ) : (
                     <div className="space-y-2">
                       {report.ai_review.trades_with_negative_r.map((item) => (
                         <div key={item.trade_id} className="p-2.5 rounded-xl bg-[var(--background)] border border-[var(--border)] flex justify-between">
                           <div>
                             <span className="font-bold text-[var(--foreground)]">{item.symbol}</span>
-                            <span className="text-[10px] text-[var(--muted)] block">Loss: ₹{Math.abs(item.net_pnl).toFixed(2)}</span>
+                            <span className="text-[10px] text-[var(--muted)] block">Direction: {item.direction}</span>
                           </div>
-                          <span className="font-bold text-rose-500">{item.realized_r !== null ? `${item.realized_r.toFixed(2)}R` : 'N/A'}</span>
+                          <span className="font-bold text-rose-500">-₹{Math.abs(item.net_pnl).toFixed(2)}</span>
                         </div>
                       ))}
                     </div>

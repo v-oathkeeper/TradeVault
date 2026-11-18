@@ -81,7 +81,34 @@ export interface Trade {
   createdAt: string;
   updatedAt: string;
 
-  // ── R-Multiple & Risk Management Fields ──────────────────
+  // ── Gemini Milestones & Trailing Stop-Loss ─────────────────
+  milestone1Target?: number | null;
+  milestone1Status?: string | null;
+  milestone1TrailingSl?: number | null;
+  milestone2Target?: number | null;
+  milestone2Status?: string | null;
+  milestone2TrailingSl?: number | null;
+  milestone3Target?: number | null;
+  milestone3Status?: string | null;
+  milestone3TrailingSl?: number | null;
+  currentTrailingSl?: number | null;
+  lastReachedMilestone?: string | null;
+  milestonesUpdatedAt?: string | null;
+
+  milestone1_target?: number | null;
+  milestone1_status?: string | null;
+  milestone1_trailing_sl?: number | null;
+  milestone2_target?: number | null;
+  milestone2_status?: string | null;
+  milestone2_trailing_sl?: number | null;
+  milestone3_target?: number | null;
+  milestone3_status?: string | null;
+  milestone3_trailing_sl?: number | null;
+  current_trailing_sl?: number | null;
+  last_reached_milestone?: string | null;
+  milestones_updated_at?: string | null;
+
+  // ── Legacy / Historical Risk Management Fields ───────────
   initialStopLoss?: number | null;
   initialRiskPerShare?: number | null;
   initialRiskRupees?: number | null;
@@ -147,6 +174,29 @@ export interface StopLossHistoryEntry {
   marketPriceAtUpdate: number | null;
   floatingRAtUpdate: number | null;
   notes: string | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+/**
+ * Gemini milestone update history entry — audit trail per trade.
+ */
+export interface TradeMilestoneHistoryEntry {
+  id: string;
+  tradeId: string;
+  milestone1Target: number | null;
+  milestone1Status: string | null;
+  milestone1TrailingSl: number | null;
+  milestone2Target: number | null;
+  milestone2Status: string | null;
+  milestone2TrailingSl: number | null;
+  milestone3Target: number | null;
+  milestone3Status: string | null;
+  milestone3TrailingSl: number | null;
+  currentTrailingSl: number | null;
+  lastReachedMilestone: string | null;
+  notes: string | null;
+  rawGeminiInput?: unknown;
   createdBy: string;
   createdAt: string;
 }

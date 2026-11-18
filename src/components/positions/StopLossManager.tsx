@@ -152,12 +152,6 @@ export function StopLossManager({
           <div className="text-base font-bold font-mono text-rose-400">
             ₹{trade.initialStopLoss?.toFixed(2) ?? '—'}
           </div>
-          {trade.initialRiskRupees && (
-            <div className="text-[10px] text-[var(--muted)]">
-              1R = {formatINR(trade.initialRiskRupees)}
-              {trade.initialRiskPct && ` (${trade.initialRiskPct.toFixed(2)}%)`}
-            </div>
-          )}
         </div>
 
         <div className={cn(
@@ -205,42 +199,6 @@ export function StopLossManager({
           )}
         </div>
       </div>
-
-      {/* R-Level Targets */}
-      {trade.r1Price && (
-        <div className="p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] space-y-2.5">
-          <span className="text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider">
-            R-Multiple Price Levels
-          </span>
-          <div className="flex flex-wrap gap-2">
-            {[
-              { label: '1R', price: trade.r1Price, color: 'text-lime-400 border-lime-500/30 bg-lime-500/10' },
-              { label: '2R', price: trade.r2Price, color: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' },
-              { label: '3R', price: trade.r3Price, color: 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10' },
-            ].filter((r) => r.price !== null).map(({ label, price, color }) => (
-              <div
-                key={label}
-                className={cn(
-                  'flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold font-mono',
-                  color
-                )}
-              >
-                <span className="font-normal opacity-70">{label}</span>
-                ₹{(price as number).toFixed(2)}
-              </div>
-            ))}
-            {trade.plannedTarget && (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold font-mono text-purple-400 border-purple-500/30 bg-purple-500/10">
-                <span className="font-normal opacity-70">Target</span>
-                ₹{trade.plannedTarget.toFixed(2)}
-                {trade.plannedRR && (
-                  <span className="text-[9px] opacity-70 ml-1">({trade.plannedRR.toFixed(1)}R)</span>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Admin: Update Stop-Loss */}
       {isAdmin && trade.status === 'OPEN' && (
@@ -339,12 +297,6 @@ export function StopLossManager({
                       {entry.marketPriceAtUpdate && (
                         <div className="text-[10px] text-[var(--muted)]">
                           Market price: ₹{entry.marketPriceAtUpdate.toFixed(2)}
-                          {entry.floatingRAtUpdate !== null && (
-                            <span className="ml-2">
-                              Floating R: {entry.floatingRAtUpdate >= 0 ? '+' : ''}
-                              {entry.floatingRAtUpdate.toFixed(2)}R
-                            </span>
-                          )}
                         </div>
                       )}
                       {entry.notes && (

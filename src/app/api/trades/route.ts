@@ -146,7 +146,6 @@ export async function POST(request: NextRequest) {
     const { calculateFeesForTrade } = await import('@/lib/calculations/fee-engine');
     const { calculateGrossPnl } = await import('@/lib/calculations/pnl');
     const { toDecimal } = await import('@/lib/calculations/decimal-utils');
-    const { calculateInitialRisk, calculateRealizedR } = await import('@/lib/calculations/r-multiple');
 
     // Get broker code for fee lookup
     const { data: broker } = await supabase
@@ -197,29 +196,16 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    // ── Compute R-multiple fields ───────────────────────────────
-    const riskCalc = calculateInitialRisk({
-      entryPrice: validated.entryPrice,
-      initialStopLoss: validated.initialStopLoss,
-      quantity: validated.quantity,
-      direction: validated.direction,
-      plannedTarget: validated.plannedTarget,
-    });
-
-    let realizedRMultiple: number | null = null;
-    let grossRMultiple: number | null = null;
-
-    if (hasExit && riskCalc && netPnl !== null && grossPnl !== null) {
-      const rResult = calculateRealizedR({
-        netPnl,
-        grossPnl,
-        riskRupees: riskCalc.riskRupees,
-      });
-      if (rResult) {
-        realizedRMultiple = rResult.realizedR;
-        grossRMultiple = rResult.grossR;
-      }
-    }
+    // ── Initial Risk fields (pure rupee/percentage risk, no R-multiples) ──
+    const riskPerShare = validated.initialStopLoss
+      ? Math.abs(validated.entryPrice - validated.initialStopLoss)
+      : null;
+    const riskRupees = riskPerShare !== null
+      ? riskPerShare * validated.quantity
+      : null;
+    const riskPct = riskPerShare !== null && validated.entryPrice > 0
+      ? (riskPerShare / validated.entryPrice) * 100
+      : null;
 
     // Insert trade
     const { data: trade, error } = await supabase
@@ -243,20 +229,20 @@ export async function POST(request: NextRequest) {
         charges_breakdown: chargesBreakdown as any,
         status,
         notes: validated.notes ?? null,
-        // ── R-Multiple & Risk fields ──
+        // ── Risk & Gemini fields (R-multiples removed) ──
         initial_stop_loss: validated.initialStopLoss,
-        initial_risk_per_share: riskCalc?.riskPerShare ?? null,
-        initial_risk_rupees: riskCalc?.riskRupees ?? null,
-        initial_risk_pct: riskCalc?.riskPct ?? null,
+        initial_risk_per_share: riskPerShare,
+        initial_risk_rupees: riskRupees,
+        initial_risk_pct: riskPct,
         planned_target: validated.plannedTarget ?? null,
-        planned_rr: riskCalc?.plannedRR ?? null,
-        r1_price: riskCalc?.r1Price ?? null,
-        r2_price: riskCalc?.r2Price ?? null,
-        r3_price: riskCalc?.r3Price ?? null,
+        planned_rr: null,
+        r1_price: null,
+        r2_price: null,
+        r3_price: null,
         strategy_name: validated.strategyName ?? null,
         current_stop_loss: validated.initialStopLoss,
-        realized_r_multiple: realizedRMultiple,
-        gross_r_multiple: grossRMultiple,
+        realized_r_multiple: null,
+        gross_r_multiple: null,
         created_by: ctx.user.id,
       })
       .select()

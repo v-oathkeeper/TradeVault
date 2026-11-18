@@ -35,14 +35,15 @@ export const POST = withAuthError(async (req: NextRequest) => {
   } = body;
 
   // Validate required fields
-  if (!portfolioOwnerId || !strategyBucket || !withdrawalType || !amount || !txDate) {
+  if (!portfolioOwnerId || !withdrawalType || !amount || !txDate) {
     return NextResponse.json(
-      { error: 'Missing required fields: portfolioOwnerId, strategyBucket, withdrawalType, amount, txDate' },
+      { error: 'Missing required fields: portfolioOwnerId, withdrawalType, amount, txDate' },
       { status: 400 }
     );
   }
 
-  if (!['INTRADAY', 'SWING'].includes(strategyBucket)) {
+  const resolvedStrategyBucket: StrategyBucket = strategyBucket || 'INTRADAY';
+  if (!['INTRADAY', 'SWING'].includes(resolvedStrategyBucket)) {
     return NextResponse.json({ error: 'strategyBucket must be INTRADAY or SWING' }, { status: 400 });
   }
 
@@ -78,7 +79,7 @@ export const POST = withAuthError(async (req: NextRequest) => {
 
   const input: RecordWithdrawalInput = {
     portfolioOwnerId,
-    strategyBucket: strategyBucket as StrategyBucket,
+    strategyBucket: resolvedStrategyBucket,
     withdrawalType,
     amount,
     txDate,

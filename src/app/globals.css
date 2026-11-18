@@ -1,60 +1,72 @@
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────
-   Theme tokens — Light
+   Theme tokens — Light (Warm Ivory & Soft Rose)
 ───────────────────────────────────────── */
 :root {
-  --background: #F8FAFC;
-  --foreground: #0F172A;
+  --background: #FAF7F2;
+  --foreground: #1C1917;
   --card: #FFFFFF;
-  --card-foreground: #0F172A;
-  --border: #E2E8F0;
-  --input: #E2E8F0;
-  --primary: #3B82F6;
+  --card-foreground: #1C1917;
+  --border: #EFE8E1;
+  --input: #EFE8E1;
+  --primary: #E11D48;
   --primary-foreground: #FFFFFF;
-  --positive: #10B981;
-  --negative: #EF4444;
-  --muted: #64748B;
-  --muted-foreground: #94A3B8;
-  --accent: #1D4ED8;
+  --rose: #F43F5E;
+  --rose-light: #FFF1F2;
+  --champagne: #D97706;
+  --champagne-light: #FEF3C7;
+  --lavender: #8B5CF6;
+  --lavender-light: #F5F3FF;
+  --positive: #059669;
+  --negative: #E11D48;
+  --muted: #78716C;
+  --muted-foreground: #A8A29E;
+  --accent: #8B5CF6;
   --accent-foreground: #FFFFFF;
-  --ring: #3B82F6;
-  --radius: 0.75rem;
-  --sidebar-bg: #1E293B;
-  --sidebar-fg: #F1F5F9;
-  --sidebar-border: #334155;
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --ring: #F43F5E;
+  --radius: 1rem;
+  --sidebar-bg: #1C1824;
+  --sidebar-fg: #FAF5F0;
+  --sidebar-border: #2D253B;
+  --shadow-sm: 0 1px 3px 0 rgba(225, 29, 72, 0.04);
+  --shadow: 0 4px 6px -1px rgba(28, 25, 23, 0.05), 0 2px 4px -2px rgba(28, 25, 23, 0.05);
+  --shadow-md: 0 10px 15px -3px rgba(225, 29, 72, 0.07), 0 4px 6px -4px rgba(225, 29, 72, 0.05);
+  --shadow-lg: 0 20px 25px -5px rgba(28, 25, 23, 0.08), 0 8px 10px -6px rgba(28, 25, 23, 0.06);
 }
 
 /* ─────────────────────────────────────────
-   Theme tokens — Dark
+   Theme tokens — Dark (Velvet Night & Champagne)
 ───────────────────────────────────────── */
 .dark {
-  --background: #0F1629;
-  --foreground: #F1F5F9;
-  --card: #1E293B;
-  --card-foreground: #F1F5F9;
-  --border: #334155;
-  --input: #334155;
-  --primary: #3B82F6;
-  --primary-foreground: #FFFFFF;
+  --background: #13111C;
+  --foreground: #FAF5F0;
+  --card: #1D1929;
+  --card-foreground: #FAF5F0;
+  --border: #2E2740;
+  --input: #2E2740;
+  --primary: #FB7185;
+  --primary-foreground: #13111C;
+  --rose: #FB7185;
+  --rose-light: rgba(251, 113, 133, 0.12);
+  --champagne: #FBBF24;
+  --champagne-light: rgba(251, 191, 36, 0.12);
+  --lavender: #C084FC;
+  --lavender-light: rgba(192, 132, 252, 0.12);
   --positive: #10B981;
-  --negative: #EF4444;
-  --muted: #64748B;
-  --muted-foreground: #94A3B8;
-  --accent: #1D4ED8;
-  --accent-foreground: #FFFFFF;
-  --ring: #3B82F6;
-  --sidebar-bg: #0B1120;
-  --sidebar-fg: #F1F5F9;
-  --sidebar-border: #1E293B;
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
-  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.4);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.5);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5);
+  --negative: #FB7185;
+  --muted: #9CA3AF;
+  --muted-foreground: #6B7280;
+  --accent: #C084FC;
+  --accent-foreground: #13111C;
+  --ring: #FB7185;
+  --sidebar-bg: #0E0C14;
+  --sidebar-fg: #FAF5F0;
+  --sidebar-border: #1F1B2B;
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.6), 0 4px 6px -4px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.7), 0 8px 10px -6px rgba(0, 0, 0, 0.6);
 }
 
 /* ─────────────────────────────────────────
@@ -75,6 +87,12 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-ring: var(--ring);
+  --color-rose: var(--rose);
+  --color-champagne: var(--champagne);
+  --color-lavender: var(--lavender);
+  --color-sidebar-bg: var(--sidebar-bg);
+  --color-sidebar-fg: var(--sidebar-fg);
+  --color-sidebar-border: var(--sidebar-border);
 
   --font-sans: "Inter", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", monospace;

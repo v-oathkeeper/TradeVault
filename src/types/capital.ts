@@ -77,15 +77,23 @@ export interface StrategyCapitalSummary {
 
 /**
  * Combined summary for a single portfolio owner (Husband or Wife).
- * Totals Intraday + Swing buckets.
  */
 export interface OwnerCapitalSummary {
   portfolioOwnerId: string;
   displayName: string;
   relationshipLabel: string;
+  // Core Couple's Capital metrics:
+  investedCapital: number;           // Initial Capital + Additional Capital - Capital Withdrawals
+  availableProfit: number;           // Max(0, allTimeProfit - profitWithdrawn)
+  allTimeProfit: number;             // Lifetime cumulative net realized P&L from closed trades
+  initialCapital: number;            // Initial capital set by admin
+  additionalCapital: number;         // Additional money added
+  profitWithdrawn: number;           // Cumulative profit withdrawals
+  capitalWithdrawn: number;          // Cumulative capital withdrawals
+  // Strategy buckets (for detailed breakdown):
   intraday: StrategyCapitalSummary;
   swing: StrategyCapitalSummary;
-  // Totals (sum of intraday + swing)
+  // Aliases for compatibility:
   totalContributedCapital: number;
   totalCurrentCapital: number;
   totalNetRealizedPnl: number;
@@ -98,17 +106,21 @@ export interface OwnerCapitalSummary {
 export interface HouseholdCapitalSummary {
   householdId: string;
   owners: OwnerCapitalSummary[];
-  // Combined household totals
+  // Primary Couple's Financial Metrics:
+  combinedInvestedCapital: number;   // Husband Invested Capital + Wife Invested Capital
+  combinedAvailableProfit: number;   // Husband Available Profit + Wife Available Profit
+  combinedAllTimeProfit: number;     // Lifetime cumulative net realized P&L
+  // Legacy / Compatibility aliases:
   combinedContributedCapital: number;
   combinedCurrentCapital: number;
   combinedNetRealizedPnl: number;
-  combinedAvailableProfit: number;
+  combinedAvailableProfitForWithdrawal?: number;
 }
 
 /** Payload for creating a new capital transaction (allocation, contribution, adjustment). */
 export interface CreateCapitalTransactionInput {
   portfolioOwnerId: string;
-  strategyBucket: StrategyBucket;
+  strategyBucket?: StrategyBucket;
   txType: Exclude<CapitalTxType, 'CAPITAL_WITHDRAWAL' | 'PROFIT_WITHDRAWAL'>;
   amount: number;
   txDate: string;
@@ -122,7 +134,7 @@ export interface CreateCapitalTransactionInput {
 /** Payload for recording a withdrawal. */
 export interface RecordWithdrawalInput {
   portfolioOwnerId: string;
-  strategyBucket: StrategyBucket;
+  strategyBucket?: StrategyBucket;
   withdrawalType: 'PROFIT' | 'CAPITAL';
   amount: number;
   txDate: string;

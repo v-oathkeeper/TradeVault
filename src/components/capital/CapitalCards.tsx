@@ -1,342 +1,259 @@
 'use client';
 
 import React from 'react';
-import { TrendingUp, TrendingDown, Wallet, ArrowDownCircle, ArrowUpCircle, Minus } from 'lucide-react';
+import {
+  Wallet,
+  TrendingUp,
+  ArrowUpCircle,
+  ArrowDownCircle,
+  Heart,
+  Coins,
+  History,
+  ShieldCheck,
+  User,
+  Sparkles,
+} from 'lucide-react';
 import { formatINR } from '@/lib/utils';
-import type { OwnerCapitalSummary, HouseholdCapitalSummary } from '@/types/capital';
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function PnlValue({ value, className }: { value: number; className?: string }) {
-  const isPositive = value > 0;
-  const isNegative = value < 0;
-  return (
-    <span
-      className={
-        `font-bold tabular-nums ${
-          isPositive
-            ? 'text-emerald-500 dark:text-emerald-400'
-            : isNegative
-            ? 'text-rose-500 dark:text-rose-400'
-            : 'text-[var(--foreground)]'
-        } ${className ?? ''}`
-      }
-    >
-      {isPositive ? '+' : ''}{formatINR(value)}
-    </span>
-  );
-}
-
-function MetricRow({
-  label,
-  value,
-  isPnl = false,
-  emphasis = false,
-}: {
-  label: string;
-  value: number;
-  isPnl?: boolean;
-  emphasis?: boolean;
-}) {
-  return (
-    <div className={`flex items-center justify-between gap-2 py-1 ${emphasis ? 'border-t border-[var(--border)] mt-1 pt-2' : ''}`}>
-      <span className={`text-xs ${emphasis ? 'font-semibold text-[var(--foreground)]' : 'text-[var(--muted)]'}`}>
-        {label}
-      </span>
-      {isPnl ? (
-        <PnlValue value={value} className={emphasis ? 'text-sm' : 'text-xs'} />
-      ) : (
-        <span className={`font-semibold tabular-nums ${emphasis ? 'text-sm text-[var(--foreground)]' : 'text-xs text-[var(--foreground)]'}`}>
-          {formatINR(value)}
-        </span>
-      )}
-    </div>
-  );
-}
-
-// ─── Single strategy bucket section (Intraday / Swing) ───────────────────────
-
-function StrategySection({
-  label,
-  contributedCapital,
-  currentCapital,
-  netRealizedPnl,
-  availableProfit,
-  profitWithdrawn,
-  capitalWithdrawn,
-}: {
-  label: string;
-  contributedCapital: number;
-  currentCapital: number;
-  netRealizedPnl: number;
-  availableProfit: number;
-  profitWithdrawn: number;
-  capitalWithdrawn: number;
-}) {
-  return (
-    <div className="rounded-xl bg-[var(--background)] border border-[var(--border)] p-3 space-y-0.5">
-      <p className="text-[10px] uppercase tracking-wider font-bold text-[var(--muted)] mb-2">
-        {label}
-      </p>
-      <MetricRow label="Contributed Capital" value={contributedCapital} />
-      <MetricRow label="Current Capital" value={currentCapital} emphasis />
-      <MetricRow label="Net Realized P&L" value={netRealizedPnl} isPnl />
-      <MetricRow label="Avail. for Withdrawal" value={availableProfit} isPnl />
-      {profitWithdrawn > 0 && (
-        <MetricRow label="Profit Withdrawn" value={profitWithdrawn} />
-      )}
-      {capitalWithdrawn > 0 && (
-        <MetricRow label="Capital Withdrawn" value={capitalWithdrawn} />
-      )}
-    </div>
-  );
-}
-
-// ─── Single owner card (Husband or Wife) ─────────────────────────────────────
-
-interface OwnerCardProps {
-  owner: OwnerCapitalSummary;
-  isAdmin: boolean;
-  onManageCapital?: () => void;
-  onRecordWithdrawal?: () => void;
-}
-
-function OwnerCapitalCard({ owner, isAdmin, onManageCapital, onRecordWithdrawal }: OwnerCardProps) {
-  const totalPnlPositive = owner.totalNetRealizedPnl > 0;
-  const totalPnlNegative = owner.totalNetRealizedPnl < 0;
-
-  return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm overflow-hidden">
-      {/* Card header */}
-      <div
-        className={`px-4 py-3 flex items-center justify-between border-b border-[var(--border)] ${
-          totalPnlPositive
-            ? 'bg-emerald-500/5'
-            : totalPnlNegative
-            ? 'bg-rose-500/5'
-            : 'bg-[var(--card)]'
-        }`}
-      >
-        <div className="flex items-center gap-2.5">
-          <div
-            className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-              totalPnlPositive
-                ? 'bg-emerald-500/15 text-emerald-500'
-                : totalPnlNegative
-                ? 'bg-rose-500/15 text-rose-500'
-                : 'bg-blue-500/10 text-blue-500'
-            }`}
-          >
-            <Wallet className="w-4 h-4" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-[var(--foreground)]">
-              {owner.displayName}&rsquo;s Portfolio
-            </h3>
-            <p className="text-[10px] text-[var(--muted)]">
-              Current: <span className="font-semibold text-[var(--foreground)]">{formatINR(owner.totalCurrentCapital)}</span>
-              &ensp;|&ensp;
-              P&amp;L:{' '}
-              <span
-                className={
-                  totalPnlPositive
-                    ? 'text-emerald-500 font-semibold'
-                    : totalPnlNegative
-                    ? 'text-rose-500 font-semibold'
-                    : 'font-semibold'
-                }
-              >
-                {owner.totalNetRealizedPnl >= 0 ? '+' : ''}
-                {formatINR(owner.totalNetRealizedPnl)}
-              </span>
-            </p>
-          </div>
-        </div>
-
-        {isAdmin && (
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={onManageCapital}
-              title="Manage Capital"
-              className="p-1.5 rounded-lg bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-colors text-xs"
-            >
-              <ArrowUpCircle className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={onRecordWithdrawal}
-              title="Record Withdrawal"
-              className="p-1.5 rounded-lg bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 transition-colors text-xs"
-            >
-              <ArrowDownCircle className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Strategy sections */}
-      <div className="p-3 space-y-2">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <StrategySection
-            label="Intraday (MIS)"
-            contributedCapital={owner.intraday.contributedCapital}
-            currentCapital={owner.intraday.currentCapital}
-            netRealizedPnl={owner.intraday.cumulativeNetRealizedPnl}
-            availableProfit={owner.intraday.availableProfitForWithdrawal}
-            profitWithdrawn={owner.intraday.cumulativeProfitWithdrawals}
-            capitalWithdrawn={owner.intraday.cumulativeCapitalWithdrawals}
-          />
-          <StrategySection
-            label="Swing (CNC)"
-            contributedCapital={owner.swing.contributedCapital}
-            currentCapital={owner.swing.currentCapital}
-            netRealizedPnl={owner.swing.cumulativeNetRealizedPnl}
-            availableProfit={owner.swing.availableProfitForWithdrawal}
-            profitWithdrawn={owner.swing.cumulativeProfitWithdrawals}
-            capitalWithdrawn={owner.swing.cumulativeCapitalWithdrawals}
-          />
-        </div>
-
-        {/* Totals row */}
-        <div className="rounded-xl bg-[var(--background)] border border-[var(--border)] p-3">
-          <p className="text-[10px] uppercase tracking-wider font-bold text-[var(--muted)] mb-2">
-            Combined Total
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div>
-              <p className="text-[10px] text-[var(--muted)]">Contributed</p>
-              <p className="text-xs font-bold text-[var(--foreground)] tabular-nums">
-                {formatINR(owner.totalContributedCapital)}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] text-[var(--muted)]">Current Capital</p>
-              <p className="text-sm font-bold text-[var(--foreground)] tabular-nums">
-                {formatINR(owner.totalCurrentCapital)}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] text-[var(--muted)]">Net Realized P&amp;L</p>
-              <PnlValue value={owner.totalNetRealizedPnl} className="text-xs" />
-            </div>
-            <div>
-              <p className="text-[10px] text-[var(--muted)]">Avail. Profit</p>
-              <p className="text-xs font-bold text-emerald-500 dark:text-emerald-400 tabular-nums">
-                {formatINR(owner.totalAvailableProfitForWithdrawal)}
-              </p>
-            </div>
-          </div>
-          {(owner.totalProfitWithdrawn > 0 || owner.totalCapitalWithdrawn > 0) && (
-            <div className="mt-2 pt-2 border-t border-[var(--border)] grid grid-cols-2 gap-3">
-              {owner.totalProfitWithdrawn > 0 && (
-                <div>
-                  <p className="text-[10px] text-[var(--muted)]">Profit Withdrawn</p>
-                  <p className="text-xs font-semibold text-amber-500 tabular-nums">
-                    {formatINR(owner.totalProfitWithdrawn)}
-                  </p>
-                </div>
-              )}
-              {owner.totalCapitalWithdrawn > 0 && (
-                <div>
-                  <p className="text-[10px] text-[var(--muted)]">Capital Withdrawn</p>
-                  <p className="text-xs font-semibold text-orange-500 tabular-nums">
-                    {formatINR(owner.totalCapitalWithdrawn)}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Household summary strip ──────────────────────────────────────────────────
-
-function HouseholdSummaryStrip({ summary }: { summary: HouseholdCapitalSummary }) {
-  return (
-    <div className="rounded-2xl border border-[var(--border)] bg-gradient-to-r from-blue-500/5 to-indigo-500/5 p-3">
-      <p className="text-[10px] uppercase tracking-wider font-bold text-[var(--muted)] mb-2">
-        Household Combined
-      </p>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div>
-          <p className="text-[10px] text-[var(--muted)]">Total Contributed</p>
-          <p className="text-sm font-bold text-[var(--foreground)] tabular-nums">
-            {formatINR(summary.combinedContributedCapital)}
-          </p>
-        </div>
-        <div>
-          <p className="text-[10px] text-[var(--muted)]">Total Current Capital</p>
-          <p className="text-sm font-bold text-[var(--foreground)] tabular-nums">
-            {formatINR(summary.combinedCurrentCapital)}
-          </p>
-        </div>
-        <div>
-          <p className="text-[10px] text-[var(--muted)]">Total Net P&amp;L</p>
-          <PnlValue value={summary.combinedNetRealizedPnl} className="text-sm" />
-        </div>
-        <div>
-          <p className="text-[10px] text-[var(--muted)]">Total Avail. Profit</p>
-          <p className="text-sm font-bold text-emerald-500 dark:text-emerald-400 tabular-nums">
-            {formatINR(summary.combinedAvailableProfit)}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Main exported component ──────────────────────────────────────────────────
+import type { HouseholdCapitalSummary, OwnerCapitalSummary } from '@/types/capital';
 
 interface CapitalCardsProps {
   summary: HouseholdCapitalSummary;
   isAdmin: boolean;
-  onManageCapital?: (ownerId: string) => void;
-  onRecordWithdrawal?: (ownerId: string) => void;
+  onAddMoney?: (ownerId?: string) => void;
+  onWithdrawMoney?: (ownerId?: string) => void;
+  onSetInitialCapital?: () => void;
 }
 
 export function CapitalCards({
   summary,
   isAdmin,
-  onManageCapital,
-  onRecordWithdrawal,
+  onAddMoney,
+  onWithdrawMoney,
+  onSetInitialCapital,
 }: CapitalCardsProps) {
-  if (summary.owners.length === 0) {
-    return (
-      <div className="rounded-2xl border border-dashed border-[var(--border)] p-6 text-center text-sm text-[var(--muted)]">
-        <Wallet className="w-8 h-8 mx-auto mb-2 opacity-30" />
-        <p>No capital data yet.</p>
-        {isAdmin && (
-          <p className="text-xs mt-1">
-            Go to <strong>Capital</strong> to set initial contributed capital.
-          </p>
-        )}
-      </div>
-    );
-  }
+  const husbandOwner =
+    summary.owners.find(
+      (o) =>
+        o.relationshipLabel.toLowerCase().includes('husband') ||
+        o.displayName.toLowerCase().includes('husband')
+    ) || summary.owners[0];
+
+  const wifeOwner =
+    summary.owners.find(
+      (o) =>
+        o.relationshipLabel.toLowerCase().includes('wife') ||
+        o.displayName.toLowerCase().includes('wife')
+    ) || summary.owners[1];
 
   return (
-    <div className="space-y-3">
-      {/* Individual owner cards */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-        {summary.owners.map((owner) => (
-          <OwnerCapitalCard
-            key={owner.portfolioOwnerId}
-            owner={owner}
-            isAdmin={isAdmin}
-            onManageCapital={() => onManageCapital?.(owner.portfolioOwnerId)}
-            onRecordWithdrawal={() => onRecordWithdrawal?.(owner.portfolioOwnerId)}
-          />
-        ))}
+    <div className="space-y-6">
+      {/* ── 1. Couple's Combined Overview Banner ───────────────────────── */}
+      <div className="rounded-3xl border border-rose-200/60 dark:border-rose-900/40 bg-gradient-to-br from-rose-500/5 via-champagne-500/5 to-lavender-500/5 p-6 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-[var(--border)]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-500 to-rose-600 text-white flex items-center justify-center shadow-md">
+              <Heart className="w-5 h-5 fill-current" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-[var(--foreground)]">Couple's Capital Overview</h3>
+              <p className="text-xs text-[var(--muted)]">Joint trading portfolio summary & combined totals</p>
+            </div>
+          </div>
+
+          {isAdmin && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={onSetInitialCapital}
+                className="px-3.5 py-2 rounded-xl border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--background)] text-xs font-semibold text-[var(--foreground)] transition-all shadow-sm flex items-center gap-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-rose-500" />
+                <span>Set Initial Capital</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onAddMoney?.()}
+                className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5"
+              >
+                <ArrowUpCircle className="w-3.5 h-3.5" />
+                <span>Add Money</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onWithdrawMoney?.()}
+                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5"
+              >
+                <ArrowDownCircle className="w-3.5 h-3.5" />
+                <span>Withdraw Money</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Combined Figures Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-5">
+          {/* Combined Invested Capital */}
+          <div className="rounded-2xl bg-[var(--card)]/80 backdrop-blur-sm border border-[var(--border)] p-4 space-y-1 shadow-sm">
+            <span className="text-[11px] font-semibold text-[var(--muted)] uppercase tracking-wider block">
+              Combined Invested Capital
+            </span>
+            <p className="text-2xl font-bold font-mono text-[var(--foreground)] tabular-nums">
+              {formatINR(summary.combinedInvestedCapital)}
+            </p>
+            <div className="pt-2 text-[11px] text-[var(--muted)] flex items-center justify-between border-t border-[var(--border)] mt-2">
+              <span>Husband: {formatINR(husbandOwner?.investedCapital ?? 0)}</span>
+              <span>Wife: {formatINR(wifeOwner?.investedCapital ?? 0)}</span>
+            </div>
+          </div>
+
+          {/* Combined Available Profit */}
+          <div className="rounded-2xl bg-[var(--card)]/80 backdrop-blur-sm border border-[var(--border)] p-4 space-y-1 shadow-sm">
+            <span className="text-[11px] font-semibold text-[var(--muted)] uppercase tracking-wider block">
+              Available Profit for Withdrawal
+            </span>
+            <p className="text-2xl font-bold font-mono text-emerald-500 dark:text-emerald-400 tabular-nums">
+              {formatINR(summary.combinedAvailableProfit)}
+            </p>
+            <div className="pt-2 text-[11px] text-[var(--muted)] flex items-center justify-between border-t border-[var(--border)] mt-2">
+              <span>Husband: {formatINR(husbandOwner?.availableProfit ?? 0)}</span>
+              <span>Wife: {formatINR(wifeOwner?.availableProfit ?? 0)}</span>
+            </div>
+          </div>
+
+          {/* Combined All-time Profit */}
+          <div className="rounded-2xl bg-[var(--card)]/80 backdrop-blur-sm border border-[var(--border)] p-4 space-y-1 shadow-sm">
+            <span className="text-[11px] font-semibold text-[var(--muted)] uppercase tracking-wider block">
+              All-Time Net Realized Profit
+            </span>
+            <p
+              className={`text-2xl font-bold font-mono tabular-nums ${
+                summary.combinedAllTimeProfit >= 0
+                  ? 'text-emerald-500 dark:text-emerald-400'
+                  : 'text-rose-500 dark:text-rose-400'
+              }`}
+            >
+              {summary.combinedAllTimeProfit >= 0 ? '+' : ''}
+              {formatINR(summary.combinedAllTimeProfit)}
+            </p>
+            <div className="pt-2 text-[11px] text-[var(--muted)] flex items-center justify-between border-t border-[var(--border)] mt-2">
+              <span>Husband: {formatINR(husbandOwner?.allTimeProfit ?? 0)}</span>
+              <span>Wife: {formatINR(wifeOwner?.allTimeProfit ?? 0)}</span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Household combined strip (shown only when both owners have data) */}
-      {summary.owners.length >= 2 && (
-        <HouseholdSummaryStrip summary={summary} />
-      )}
+      {/* ── 2. Individual Account Cards (Husband & Wife) ────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {summary.owners.map((owner) => {
+          const isHusband =
+            owner.relationshipLabel.toLowerCase().includes('husband') ||
+            owner.displayName.toLowerCase().includes('husband');
+
+          return (
+            <div
+              key={owner.portfolioOwnerId}
+              className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm space-y-4 hover:border-rose-300 dark:hover:border-rose-900/50 transition-all"
+            >
+              {/* Account Header */}
+              <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className={`w-9 h-9 rounded-2xl flex items-center justify-center font-bold text-sm ${
+                      isHusband
+                        ? 'bg-rose-500/10 text-rose-500'
+                        : 'bg-lavender-500/10 text-purple-500 dark:text-purple-400'
+                    }`}
+                  >
+                    <User className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold text-[var(--foreground)]">
+                      {owner.displayName}{' '}
+                      <span className="text-xs font-normal text-[var(--muted)]">
+                        ({owner.relationshipLabel})
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-[var(--muted)]">Individual financial record</p>
+                  </div>
+                </div>
+
+                {isAdmin && (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => onAddMoney?.(owner.portfolioOwnerId)}
+                      className="p-1.5 rounded-xl hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-[var(--border)] text-xs font-semibold flex items-center gap-1 transition-colors"
+                      title={`Add money to ${owner.displayName}`}
+                    >
+                      <ArrowUpCircle className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Add</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onWithdrawMoney?.(owner.portfolioOwnerId)}
+                      className="p-1.5 rounded-xl hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-[var(--border)] text-xs font-semibold flex items-center gap-1 transition-colors"
+                      title={`Withdraw money from ${owner.displayName}`}
+                    >
+                      <ArrowDownCircle className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Withdraw</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Individual Metrics Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3.5 rounded-2xl bg-[var(--background)] border border-[var(--border)] space-y-0.5">
+                  <span className="text-[10px] uppercase font-semibold text-[var(--muted)] block">
+                    Invested Capital
+                  </span>
+                  <span className="text-lg font-bold font-mono text-[var(--foreground)] tabular-nums">
+                    {formatINR(owner.investedCapital)}
+                  </span>
+                  <span className="text-[10px] text-[var(--muted)] block pt-1">
+                    Initial: {formatINR(owner.initialCapital)}
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-[var(--background)] border border-[var(--border)] space-y-0.5">
+                  <span className="text-[10px] uppercase font-semibold text-[var(--muted)] block">
+                    Avail. for Withdrawal
+                  </span>
+                  <span className="text-lg font-bold font-mono text-emerald-500 dark:text-emerald-400 tabular-nums">
+                    {formatINR(owner.availableProfit)}
+                  </span>
+                  <span className="text-[10px] text-[var(--muted)] block pt-1">
+                    Withdrawn: {formatINR(owner.profitWithdrawn)}
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-[var(--background)] border border-[var(--border)] space-y-0.5 col-span-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-semibold text-[var(--muted)] block">
+                      All-Time Net Realized Profit
+                    </span>
+                    <span
+                      className={`text-base font-bold font-mono tabular-nums ${
+                        owner.allTimeProfit >= 0
+                          ? 'text-emerald-500 dark:text-emerald-400'
+                          : 'text-rose-500 dark:text-rose-400'
+                      }`}
+                    >
+                      {owner.allTimeProfit >= 0 ? '+' : ''}
+                      {formatINR(owner.allTimeProfit)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-[var(--muted)] pt-1 border-t border-[var(--border)] mt-1">
+                    <span>Additional Capital Added: {formatINR(owner.additionalCapital)}</span>
+                    <span>Capital Withdrawn: {formatINR(owner.capitalWithdrawn)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

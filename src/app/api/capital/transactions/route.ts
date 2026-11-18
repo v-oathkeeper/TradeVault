@@ -56,15 +56,15 @@ export const POST = withAuthError(async (req: NextRequest) => {
   } = body;
 
   // Validate required fields
-  if (!portfolioOwnerId || !strategyBucket || !txType || !amount || !txDate) {
+  if (!portfolioOwnerId || !txType || !amount || !txDate) {
     return NextResponse.json(
-      { error: 'Missing required fields: portfolioOwnerId, strategyBucket, txType, amount, txDate' },
+      { error: 'Missing required fields: portfolioOwnerId, txType, amount, txDate' },
       { status: 400 }
     );
   }
 
-  // Validate strategy bucket
-  if (!['INTRADAY', 'SWING'].includes(strategyBucket)) {
+  const resolvedStrategyBucket: StrategyBucket = strategyBucket || 'INTRADAY';
+  if (!['INTRADAY', 'SWING'].includes(resolvedStrategyBucket)) {
     return NextResponse.json({ error: 'strategyBucket must be INTRADAY or SWING' }, { status: 400 });
   }
 
@@ -98,7 +98,7 @@ export const POST = withAuthError(async (req: NextRequest) => {
 
   const input: CreateCapitalTransactionInput = {
     portfolioOwnerId,
-    strategyBucket: strategyBucket as StrategyBucket,
+    strategyBucket: resolvedStrategyBucket,
     txType,
     amount,
     txDate,

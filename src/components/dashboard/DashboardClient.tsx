@@ -10,29 +10,31 @@ import {
   Clock,
   Target,
   Receipt,
-  Shield,
-  Activity,
-  UploadCloud,
+  Heart,
+  Sparkles,
+  ArrowUpCircle,
+  ArrowDownCircle,
   Plus,
-  PiggyBank,
+  Coins,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { KPICard } from '@/components/dashboard/KPICard';
 import type { ChartDataPoint } from '@/components/charts/PortfolioChart';
 import { RecentTradesList } from '@/components/dashboard/RecentTradesList';
 import { useUser } from '@/components/providers/UserContext';
+import { useCapitalData } from '@/lib/hooks/useCapitalData';
 import { formatDate, formatINR } from '@/lib/utils';
 import type { Trade, MonthlyPnl } from '@/types/app';
 import type { HouseholdCapitalSummary } from '@/types/capital';
 
-// Lazy-load heavy Recharts visualizers and modals to keep initial bundle ultra-light
+// Lazy-load charts and modals to keep initial bundle light
 const PortfolioChart = dynamic(
   () => import('@/components/charts/PortfolioChart').then((m) => m.PortfolioChart),
   {
     ssr: false,
     loading: () => (
-      <div className="h-[280px] w-full rounded-2xl bg-[var(--background)] animate-pulse flex items-center justify-center text-xs text-[var(--muted)]">
-        Loading equity chart...
+      <div className="h-[280px] w-full rounded-3xl bg-[var(--card)] animate-pulse flex items-center justify-center text-xs text-[var(--muted)]">
+        Loading performance chart...
       </div>
     ),
   }
@@ -43,35 +45,30 @@ const MonthlyBarChart = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-[280px] w-full rounded-2xl bg-[var(--background)] animate-pulse flex items-center justify-center text-xs text-[var(--muted)]">
+      <div className="h-[280px] w-full rounded-3xl bg-[var(--card)] animate-pulse flex items-center justify-center text-xs text-[var(--muted)]">
         Loading monthly breakdown...
       </div>
     ),
   }
 );
 
-const ImportTradeModal = dynamic(
-  () => import('@/components/trades/ImportTradeModal').then((m) => m.ImportTradeModal),
+const AddMoneyModal = dynamic(
+  () => import('@/components/capital/AddMoneyModal').then((m) => m.AddMoneyModal),
   { ssr: false }
 );
 
-const CapitalCards = dynamic(
-  () => import('@/components/capital/CapitalCards').then((m) => m.CapitalCards),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="h-32 w-full rounded-2xl bg-[var(--card)] animate-pulse border border-[var(--border)]" />
-    ),
-  }
-);
-
-const ManageCapitalModal = dynamic(
-  () => import('@/components/capital/ManageCapitalModal').then((m) => m.ManageCapitalModal),
+const WithdrawMoneyModal = dynamic(
+  () => import('@/components/capital/WithdrawMoneyModal').then((m) => m.WithdrawMoneyModal),
   { ssr: false }
 );
 
-const RecordWithdrawalModal = dynamic(
-  () => import('@/components/capital/RecordWithdrawalModal').then((m) => m.RecordWithdrawalModal),
+const SetInitialCapitalModal = dynamic(
+  () => import('@/components/capital/SetInitialCapitalModal').then((m) => m.SetInitialCapitalModal),
+  { ssr: false }
+);
+
+const ImportGeminiMilestonesModal = dynamic(
+  () => import('@/components/trades/ImportGeminiMilestonesModal').then((m) => m.ImportGeminiMilestonesModal),
   { ssr: false }
 );
 
@@ -81,14 +78,27 @@ interface DashboardClientProps {
   isAdmin?: boolean;
 }
 
-export function DashboardClient({ initialTrades, capitalSummary, isAdmin: isAdminProp }: DashboardClientProps) {
+export function DashboardClient({
+  initialTrades,
+  capitalSummary,
+  isAdmin: isAdminProp,
+}: DashboardClientProps) {
   const router = useRouter();
-  const { selectedPersonId, getPersonLabel, persons, isAdmin: isAdminCtx } = useUser();
+  const { selectedPersonId, getPersonLabel, isAdmin: isAdminCtx } = useUser();
   const isAdmin = isAdminProp ?? isAdminCtx;
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [showManageCapital, setShowManageCapital] = useState(false);
-  const [showWithdrawal, setShowWithdrawal] = useState(false);
-  const [capitalPreselectedOwner, setCapitalPreselectedOwner] = useState<string | undefined>();
+
+  const {
+    summary,
+    husbandSummary,
+    wifeSummary,
+    currentViewData,
+    invalidateCapitalCache,
+  } = useCapitalData(capitalSummary);
+
+  const [showAddMoney, setShowAddMoney] = useState(false);
+  const [showWithdrawMoney, setShowWithdrawMoney] = useState(false);
+  const [showSetInitialCapital, setShowSetInitialCapital] = useState(false);
+  const [showGeminiImport, setShowGeminiImport] = useState(false);
 
   // Filter trades based on selected person
   const filteredTrades = useMemo(() => {
@@ -98,7 +108,7 @@ export function DashboardClient({ initialTrades, capitalSummary, isAdmin: isAdmi
     return initialTrades.filter((t) => t.portfolioOwnerId === selectedPersonId);
   }, [initialTrades, selectedPersonId]);
 
-  // Compute KPIs
+  // Compute trade KPIs (No R-Multiples!)
   const kpis = useMemo(() => {
     const closedTrades = filteredTrades.filter((t) => t.status === 'CLOSED');
     const openTrades = filteredTrades.filter((t) => t.status === 'OPEN');
@@ -119,47 +129,14 @@ export function DashboardClient({ initialTrades, capitalSummary, isAdmin: isAdmi
     const totalResolved = winningTrades + losingTrades;
     const winRate = totalResolved > 0 ? (winningTrades / totalResolved) * 100 : 0;
 
-    // Unrealized gross/net estimation for open positions
-    let currentUnrealizedNetPnl = 0;
-    openTrades.forEach((t) => {
-      // If current price available, calculate unrealized
-      const currentPrice = (t as any).currentPrice ?? t.entryPrice;
-      const gross =
-        t.direction === 'LONG'
-          ? (currentPrice - t.entryPrice) * t.quantity
-          : (t.entryPrice - currentPrice) * t.quantity;
-      currentUnrealizedNetPnl += gross; // simplified without exit charges
-    });
-
-    let totalR = 0;
-    let rCount = 0;
-    closedTrades.forEach((t) => {
-      if (t.realizedRMultiple != null) {
-        totalR += t.realizedRMultiple;
-        rCount += 1;
-      }
-    });
-    const avgRMultiple = rCount > 0 ? totalR / rCount : null;
-
-    let totalOpenRisk = 0;
-    openTrades.forEach((t) => {
-      if (t.initialRiskRupees != null) {
-        totalOpenRisk += t.initialRiskRupees;
-      }
-    });
-
     return {
       totalRealizedNetPnl,
-      currentUnrealizedNetPnl,
       totalClosedTrades: closedTrades.length,
       totalOpenPositions: openTrades.length,
       winRate,
       totalChargesPaid,
       winningTrades,
       losingTrades,
-      avgRMultiple,
-      totalOpenRisk,
-      rCount,
     };
   }, [filteredTrades]);
 
@@ -200,7 +177,7 @@ export function DashboardClient({ initialTrades, capitalSummary, isAdmin: isAdmi
     closedTrades.forEach((t) => {
       const date = new Date(t.exitAt!);
       const year = date.getFullYear();
-      const month = date.getMonth(); // 0-11
+      const month = date.getMonth();
       const key = `${year}-${String(month + 1).padStart(2, '0')}`;
       const label = date.toLocaleDateString('en-IN', {
         month: 'short',
@@ -236,33 +213,62 @@ export function DashboardClient({ initialTrades, capitalSummary, isAdmin: isAdmi
   }, [filteredTrades]);
 
   const activeLabel = getPersonLabel(selectedPersonId);
+  const isCombined = selectedPersonId === 'combined';
+
+  const handleMutationSuccess = () => {
+    invalidateCapitalCache();
+    router.refresh();
+  };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto transition-all duration-300">
       {/* Portfolio overview header banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border)] pb-4">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-[var(--foreground)]">
-            {activeLabel} Portfolio Performance
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border)] pb-5">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-rose-500 font-semibold text-xs tracking-wider uppercase flex items-center gap-1">
+              <Heart className="w-3.5 h-3.5 fill-current" />
+              {activeLabel} Account View
+            </span>
+          </div>
+          <h2 className="text-2xl font-bold tracking-tight text-[var(--foreground)]">
+            Trading &amp; Profit Dashboard
           </h2>
           <p className="text-xs text-[var(--muted)]">
-            Real-time equity analytics, net returns, and broker expense metrics
+            Tracking invested capital, realized profits, and Gemini-provided trade milestones
           </p>
         </div>
 
         {isAdmin && (
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
-              onClick={() => setShowImportModal(true)}
-              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-[var(--card)] hover:bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] font-semibold text-xs transition-colors shadow-sm"
+              onClick={() => setShowGeminiImport(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-[var(--card)] hover:bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] font-semibold text-xs transition-colors shadow-sm"
+              title="Import Gemini Milestones"
             >
-              <UploadCloud className="w-4 h-4 text-blue-500" />
-              <span>Import Trade</span>
+              <Sparkles className="w-4 h-4 text-purple-500" />
+              <span>Import Gemini</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAddMoney(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-xs shadow-sm transition-all"
+            >
+              <ArrowUpCircle className="w-4 h-4" />
+              <span>Add Money</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowWithdrawMoney(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold text-xs shadow-sm transition-all"
+            >
+              <ArrowDownCircle className="w-4 h-4" />
+              <span>Withdraw</span>
             </button>
             <Link
               href="/trades/new"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium text-xs shadow-md shadow-blue-500/20 transition-all"
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white font-semibold text-xs shadow-md shadow-rose-500/20 transition-all"
             >
               <Plus className="w-4 h-4" />
               <span>Record Trade</span>
@@ -271,48 +277,93 @@ export function DashboardClient({ initialTrades, capitalSummary, isAdmin: isAdmi
         )}
       </div>
 
-      {/* ── Capital Cards — Prominent top section ── */}
-      {capitalSummary && (
-        <div className="space-y-2">
+      {/* ── 1. The 3 Primary Profit & Capital Cards ──────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Current Invested Capital */}
+        <div className="p-5 rounded-3xl bg-[var(--card)] border border-[var(--border)] shadow-sm space-y-2 hover:border-rose-300 dark:hover:border-rose-900/40 transition-all">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-1.5">
-              <PiggyBank className="w-4 h-4 text-blue-500" />
-              Portfolio Capital
-            </h3>
-            <Link href="/capital" className="text-xs text-blue-500 hover:text-blue-400 font-medium transition-colors">
-              Manage →
-            </Link>
+            <span className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
+              Invested Capital
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center">
+              <Wallet className="w-4 h-4" />
+            </div>
           </div>
-          <CapitalCards
-            summary={capitalSummary}
-            isAdmin={isAdmin}
-            onManageCapital={(ownerId) => {
-              setCapitalPreselectedOwner(ownerId);
-              setShowManageCapital(true);
-            }}
-            onRecordWithdrawal={(ownerId) => {
-              setCapitalPreselectedOwner(ownerId);
-              setShowWithdrawal(true);
-            }}
-          />
+          <p className="text-3xl font-bold font-mono text-[var(--foreground)] tabular-nums">
+            {formatINR(currentViewData.investedCapital)}
+          </p>
+          <div className="text-[11px] text-[var(--muted)] pt-1 flex items-center justify-between border-t border-[var(--border)] mt-2">
+            {isCombined ? (
+              <>
+                <span>Husband: {formatINR(husbandSummary?.investedCapital ?? 0)}</span>
+                <span>Wife: {formatINR(wifeSummary?.investedCapital ?? 0)}</span>
+              </>
+            ) : (
+              <span>Initial: {formatINR(currentViewData.initialCapital)}</span>
+            )}
+          </div>
         </div>
-      )}
 
-      {/* 6 Core KPI Cards Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-        <KPICard
-          title="Realized Net P&L"
-          value={kpis.totalRealizedNetPnl}
-          isCurrency
-          icon={Wallet}
-        />
-        <KPICard
-          title="Unrealized P&L"
-          value={kpis.currentUnrealizedNetPnl}
-          isCurrency
-          icon={TrendingUp}
-          subtitle="Open positions"
-        />
+        {/* Available Profit for Withdrawal */}
+        <div className="p-5 rounded-3xl bg-[var(--card)] border border-[var(--border)] shadow-sm space-y-2 hover:border-rose-300 dark:hover:border-rose-900/40 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
+              Available Profit
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+              <Coins className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="text-3xl font-bold font-mono text-emerald-500 dark:text-emerald-400 tabular-nums">
+            {formatINR(currentViewData.availableProfit)}
+          </p>
+          <div className="text-[11px] text-[var(--muted)] pt-1 flex items-center justify-between border-t border-[var(--border)] mt-2">
+            {isCombined ? (
+              <>
+                <span>Husband: {formatINR(husbandSummary?.availableProfit ?? 0)}</span>
+                <span>Wife: {formatINR(wifeSummary?.availableProfit ?? 0)}</span>
+              </>
+            ) : (
+              <span>Withdrawn: {formatINR(currentViewData.profitWithdrawn)}</span>
+            )}
+          </div>
+        </div>
+
+        {/* All-time Net Realized Profit */}
+        <div className="p-5 rounded-3xl bg-[var(--card)] border border-[var(--border)] shadow-sm space-y-2 hover:border-rose-300 dark:hover:border-rose-900/40 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
+              All-Time Realized Profit
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center">
+              <TrendingUp className="w-4 h-4" />
+            </div>
+          </div>
+          <p
+            className={`text-3xl font-bold font-mono tabular-nums ${
+              currentViewData.allTimeProfit >= 0
+                ? 'text-emerald-500 dark:text-emerald-400'
+                : 'text-rose-500 dark:text-rose-400'
+            }`}
+          >
+            {currentViewData.allTimeProfit >= 0 ? '+' : ''}
+            {formatINR(currentViewData.allTimeProfit)}
+          </p>
+          <div className="text-[11px] text-[var(--muted)] pt-1 flex items-center justify-between border-t border-[var(--border)] mt-2">
+            {isCombined ? (
+              <>
+                <span>Husband: {formatINR(husbandSummary?.allTimeProfit ?? 0)}</span>
+                <span>Wife: {formatINR(wifeSummary?.allTimeProfit ?? 0)}</span>
+              </>
+            ) : (
+              <span>Lifetime closed trades P&amp;L</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── 2. Trade Statistics Row ───────────────────────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <KPICard
           title="Win Rate"
           value={`${kpis.winRate.toFixed(1)}%`}
@@ -330,7 +381,7 @@ export function DashboardClient({ initialTrades, capitalSummary, isAdmin: isAdmi
           icon={Clock}
         />
         <KPICard
-          title="Total Charges"
+          title="Total Charges Paid"
           value={kpis.totalChargesPaid}
           isCurrency
           icon={Receipt}
@@ -338,79 +389,50 @@ export function DashboardClient({ initialTrades, capitalSummary, isAdmin: isAdmi
         />
       </div>
 
-      {/* R-Multiple Risk & Performance Summary Strip */}
-      {(kpis.avgRMultiple !== null || kpis.totalOpenRisk > 0) && (
-        <div className="p-4 rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 font-mono text-xs">
-          {kpis.avgRMultiple !== null && (
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center shrink-0">
-                <Activity className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="text-[10px] text-[var(--muted)] uppercase font-semibold block">
-                  Avg Realized R ({kpis.rCount} trades)
-                </span>
-                <span className={`text-base font-bold ${kpis.avgRMultiple >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {kpis.avgRMultiple >= 0 ? '+' : ''}{kpis.avgRMultiple.toFixed(2)}R
-                </span>
-              </div>
-            </div>
-          )}
-          {kpis.totalOpenRisk > 0 && (
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center shrink-0">
-                <Shield className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="text-[10px] text-rose-400 uppercase font-semibold block">
-                  Open Risk at Stake
-                </span>
-                <span className="text-base font-bold text-rose-400">
-                  {formatINR(kpis.totalOpenRisk)}
-                </span>
-              </div>
-            </div>
-          )}
-          <div className="hidden lg:flex items-center justify-end text-[11px] text-[var(--muted)] font-sans">
-            <span>R = Initial 1R Risk Per Trade Unit</span>
-          </div>
-        </div>
-      )}
-
-      {/* Charts Grid */}
+      {/* ── 3. Charts Grid ────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <PortfolioChart data={chartData} />
         <MonthlyBarChart data={monthlyData} />
       </div>
 
-      {/* Recent Trades Section */}
+      {/* ── 4. Recent Trades Section ──────────────────────────────────────── */}
       <RecentTradesList trades={filteredTrades} />
 
-      {/* Import Trade Modal */}
-      <ImportTradeModal
-        open={showImportModal}
-        onClose={() => setShowImportModal(false)}
-        onSuccess={() => {
-          router.refresh();
-        }}
-      />
-
-      {/* Capital Modals (admin only) */}
-      {isAdmin && capitalSummary && (
+      {/* ── 5. Admin Modals ──────────────────────────────────────────────── */}
+      {isAdmin && (
         <>
-          <ManageCapitalModal
-            open={showManageCapital}
-            owners={capitalSummary.owners}
-            initialOwnerId={capitalPreselectedOwner}
-            onClose={() => setShowManageCapital(false)}
-            onSuccess={() => router.refresh()}
+          <AddMoneyModal
+            open={showAddMoney}
+            onClose={() => setShowAddMoney(false)}
+            onSuccess={handleMutationSuccess}
+            preselectedOwnerId={selectedPersonId !== 'combined' ? selectedPersonId : undefined}
           />
-          <RecordWithdrawalModal
-            open={showWithdrawal}
-            owners={capitalSummary.owners}
-            initialOwnerId={capitalPreselectedOwner}
-            onClose={() => setShowWithdrawal(false)}
-            onSuccess={() => router.refresh()}
+          <WithdrawMoneyModal
+            open={showWithdrawMoney}
+            onClose={() => setShowWithdrawMoney(false)}
+            onSuccess={handleMutationSuccess}
+            summary={summary || capitalSummary}
+            preselectedOwnerId={selectedPersonId !== 'combined' ? selectedPersonId : undefined}
+          />
+          <SetInitialCapitalModal
+            open={showSetInitialCapital}
+            onClose={() => setShowSetInitialCapital(false)}
+            onSuccess={handleMutationSuccess}
+            husbandInitial={husbandSummary?.initialCapital ?? 0}
+            wifeInitial={wifeSummary?.initialCapital ?? 0}
+            husbandId={husbandSummary?.portfolioOwnerId}
+            wifeId={wifeSummary?.portfolioOwnerId}
+          />
+          <ImportGeminiMilestonesModal
+            open={showGeminiImport}
+            onClose={() => setShowGeminiImport(false)}
+            onSuccess={handleMutationSuccess}
+            availableTrades={initialTrades.map((t) => ({
+              id: t.id,
+              symbol: t.symbol,
+              entryPrice: t.entryPrice,
+              status: t.status,
+            }))}
           />
         </>
       )}

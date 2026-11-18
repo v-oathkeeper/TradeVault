@@ -26,7 +26,6 @@ import { useUser } from '@/components/providers/UserContext';
 import { calculateFeesForTrade } from '@/lib/calculations/fee-engine';
 import { calculateGrossPnl } from '@/lib/calculations/pnl';
 import { toDecimal } from '@/lib/calculations/decimal-utils';
-import { calculateInitialRisk } from '@/lib/calculations/r-multiple';
 import { formatINR, cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import dynamic from 'next/dynamic';
@@ -112,28 +111,27 @@ export function TradeForm({ brokers, initialData, isEditing = false }: TradeForm
     return brokers.find((b) => b.id === watched.brokerId);
   }, [brokers, watched.brokerId]);
 
-  // Live R-multiple risk preview
+  // Live risk preview (monetary risk, no R-multiples)
   const riskPreview = useMemo(() => {
     const entry = Number(watched.entryPrice) || 0;
     const stop = Number(watched.initialStopLoss) || 0;
     const qty = Number(watched.quantity) || 0;
-    const target = watched.plannedTarget ? Number(watched.plannedTarget) : null;
 
     if (entry <= 0 || stop <= 0 || qty <= 0) return null;
 
-    return calculateInitialRisk({
-      entryPrice: entry,
-      initialStopLoss: stop,
-      quantity: qty,
-      direction: watched.direction,
-      plannedTarget: target,
-    });
+    const riskPerShare = Math.abs(entry - stop);
+    const riskRupees = riskPerShare * qty;
+    const riskPct = (riskPerShare / entry) * 100;
+
+    return {
+      riskPerShare,
+      riskRupees,
+      riskPct,
+    };
   }, [
     watched.entryPrice,
     watched.initialStopLoss,
     watched.quantity,
-    watched.direction,
-    watched.plannedTarget,
   ]);
 
   // Live P&L calculation preview (only when exit is provided)
@@ -243,11 +241,6 @@ export function TradeForm({ brokers, initialData, isEditing = false }: TradeForm
 
     const net = gross.minus(toDecimal(fees.totalCharges)).toNumber();
 
-    // Compute realized R if risk is known
-    const realizedR = riskPreview && riskPreview.riskRupees > 0
-      ? net / riskPreview.riskRupees
-      : null;
-
     return {
       grossPnl: gross.toNumber(),
       totalCharges: fees.totalCharges,
@@ -259,7 +252,6 @@ export function TradeForm({ brokers, initialData, isEditing = false }: TradeForm
       sebiCharges: fees.sebiCharges,
       stampDuty: fees.stampDuty,
       dpCharges: fees.dpCharges,
-      realizedR,
     };
   }, [
     watched.quantity,
@@ -625,17 +617,17 @@ export function TradeForm({ brokers, initialData, isEditing = false }: TradeForm
               </div>
             </div>
 
-            {/* Live Risk Preview */}
+            {/* Live Risk Preview (Rupee & % risk) */}
             {riskPreview && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <div className="p-2.5 rounded-xl bg-[var(--card)] border border-rose-500/20 text-center">
-                  <span className="block text-[10px] text-rose-400 uppercase font-semibold">Risk/Share</span>
-                  <span className="text-sm font-bold font-mono text-rose-400">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-2.5 rounded-xl bg-[var(--card)] border border-[var(--border)] text-center">
+                  <span className="block text-[10px] text-[var(--muted)] uppercase font-semibold">Risk/Share</span>
+                  <span className="text-sm font-bold font-mono text-[var(--foreground)]">
                     ₹{riskPreview.riskPerShare.toFixed(2)}
                   </span>
                 </div>
                 <div className="p-2.5 rounded-xl bg-[var(--card)] border border-rose-500/20 text-center">
-                  <span className="block text-[10px] text-rose-400 uppercase font-semibold">Total 1R</span>
+                  <span className="block text-[10px] text-rose-400 uppercase font-semibold">Total Risk</span>
                   <span className="text-sm font-bold font-mono text-rose-400">
                     {formatINR(riskPreview.riskRupees)}
                   </span>
@@ -645,47 +637,6 @@ export function TradeForm({ brokers, initialData, isEditing = false }: TradeForm
                   <span className="text-sm font-bold font-mono text-rose-400">
                     {riskPreview.riskPct.toFixed(2)}%
                   </span>
-                </div>
-                {riskPreview.plannedRR !== null ? (
-                  <div className="p-2.5 rounded-xl bg-[var(--card)] border border-emerald-500/20 text-center">
-                    <span className="block text-[10px] text-emerald-400 uppercase font-semibold">Plan R:R</span>
-                    <span className="text-sm font-bold font-mono text-emerald-400">
-                      1:{riskPreview.plannedRR.toFixed(1)}
-                    </span>
-                  </div>
-                ) : (
-                  <div className="p-2.5 rounded-xl bg-[var(--card)] border border-[var(--border)] text-center opacity-40">
-                    <span className="block text-[10px] text-[var(--muted)] uppercase font-semibold">Plan R:R</span>
-                    <span className="text-sm font-bold font-mono text-[var(--muted)]">—</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* R-Level Targets */}
-            {riskPreview && (
-              <div className="space-y-1.5">
-                <span className="text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider">
-                  R-Multiple Price Levels
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { label: '1R', price: riskPreview.r1Price, color: 'text-lime-400 bg-lime-500/10 border-lime-500/30' },
-                    { label: '2R', price: riskPreview.r2Price, color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' },
-                    { label: '3R', price: riskPreview.r3Price, color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30' },
-                    { label: '4R', price: riskPreview.r4Price, color: 'text-blue-400 bg-blue-500/10 border-blue-500/30' },
-                  ].map(({ label, price, color }) => (
-                    <span
-                      key={label}
-                      className={cn(
-                        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold font-mono',
-                        color
-                      )}
-                    >
-                      <span className="font-normal opacity-70">{label}</span>
-                      ₹{price.toFixed(2)}
-                    </span>
-                  ))}
                 </div>
               </div>
             )}
@@ -794,7 +745,7 @@ export function TradeForm({ brokers, initialData, isEditing = false }: TradeForm
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center">
                 <div className="p-2.5 rounded-xl bg-[var(--card)] border border-[var(--border)]">
                   <span className="block text-[10px] text-[var(--muted)] uppercase font-semibold">Gross P&L</span>
                   <span
@@ -822,29 +773,6 @@ export function TradeForm({ brokers, initialData, isEditing = false }: TradeForm
                   >
                     {formatINR(livePreview.netPnl, { showSign: true })}
                   </span>
-                </div>
-                {/* Realized R badge */}
-                <div className="p-2.5 rounded-xl bg-[var(--card)] border border-[var(--border)]">
-                  <span className="block text-[10px] text-[var(--muted)] uppercase font-semibold">Realized R</span>
-                  {livePreview.realizedR !== null ? (
-                    <span
-                      className={cn(
-                        'text-sm font-bold font-mono',
-                        livePreview.realizedR >= 1
-                          ? 'text-emerald-500'
-                          : livePreview.realizedR >= 0
-                          ? 'text-lime-500'
-                          : livePreview.realizedR >= -1
-                          ? 'text-orange-400'
-                          : 'text-rose-500'
-                      )}
-                    >
-                      {livePreview.realizedR >= 0 ? '+' : ''}
-                      {livePreview.realizedR.toFixed(2)}R
-                    </span>
-                  ) : (
-                    <span className="text-sm font-bold font-mono text-[var(--muted)]">—</span>
-                  )}
                 </div>
               </div>
 
