@@ -36,30 +36,37 @@ interface ImportTradeModalProps {
 const EXAMPLE_JSON = `{
   "schema_version": "1.0",
   "source": "gemini_trading_skill",
-  "symbol": "PPLPHARMA",
+  "updated_at": "2026-11-19T15:10:00+05:30",
+  "portfolio_owner": "me",
+  "broker": "ZERODHA",
   "exchange": "NSE",
-  "trading_type": "CNC",
+  "symbol": "PPLPHARMA",
+  "trade_type": "SWING",
   "direction": "LONG",
   "entry_price": 239.94,
   "initial_stop_loss": 230.50,
+  "quantity": 30,
+  "strategy": "Swing",
   "milestones": {
     "milestone_1": {
       "target_price": 254.10,
       "status": "PENDING",
-      "trailing_stop_loss": null
+      "trailing_stop_loss": 241.00
     },
     "milestone_2": {
       "target_price": 258.85,
       "status": "PENDING",
-      "trailing_stop_loss": null
+      "trailing_stop_loss": 254.10
     },
     "milestone_3": {
       "target_price": 266.40,
       "status": "PENDING",
-      "trailing_stop_loss": null
+      "trailing_stop_loss": 258.85
     }
   },
-  "notes": "Filled 30 shares at 239.94. M1=254.10, M2=258.85, M3=266.40."
+  "last_reached_milestone": null,
+  "current_trailing_stop_loss": null,
+  "notes": "Filled 30 shares at 239.94 (15:08:41 IST). On M1 (254.10), trail stop to SL2 Estimated Net Breakeven (241.00); on M2 (258.85), trail stop to SL3 (254.10); M3 target at 266.40."
 }`;
 
 export function ImportTradeModal({ open, onClose, onSuccess }: ImportTradeModalProps) {
@@ -482,6 +489,39 @@ export function ImportTradeModal({ open, onClose, onSuccess }: ImportTradeModalP
                                 <span className="text-[var(--muted)]">Target: </span>
                                 <strong className="text-emerald-400">{formatINR(item.targetPrice)}</strong>
                               </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Gemini Milestones & Trailing Stops (when present) */}
+                        {item.milestone1_target != null && (
+                          <div className="p-2.5 rounded-xl bg-purple-500/5 border border-purple-500/15 flex flex-wrap items-center gap-3 text-[11px] font-mono">
+                            <span className="font-semibold text-purple-400 font-sans flex items-center gap-1">
+                              <Sparkles className="w-3 h-3" /> Milestones:
+                            </span>
+                            {item.milestone1_target != null && (
+                              <span>
+                                <strong className="text-[var(--foreground)]">M1:</strong> {formatINR(item.milestone1_target)}
+                                {item.milestone1_trailing_sl != null && (
+                                  <span className="text-rose-400"> (Trail: {formatINR(item.milestone1_trailing_sl)})</span>
+                                )}
+                              </span>
+                            )}
+                            {item.milestone2_target != null && (
+                              <span>
+                                <strong className="text-[var(--foreground)]">M2:</strong> {formatINR(item.milestone2_target)}
+                                {item.milestone2_trailing_sl != null && (
+                                  <span className="text-rose-400"> (Trail: {formatINR(item.milestone2_trailing_sl)})</span>
+                                )}
+                              </span>
+                            )}
+                            {item.milestone3_target != null && (
+                              <span>
+                                <strong className="text-[var(--foreground)]">M3:</strong> {formatINR(item.milestone3_target)}
+                                {item.milestone3_trailing_sl != null && (
+                                  <span className="text-rose-400"> (Trail: {formatINR(item.milestone3_trailing_sl)})</span>
+                                )}
+                              </span>
                             )}
                           </div>
                         )}

@@ -9,6 +9,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import {
   parseAndValidateGeminiJson,
   type NormalizedGeminiMilestones,
+  type TradeDetailsItem,
 } from '@/lib/validation/gemini-schema';
 import type { TradeMilestoneHistoryEntry } from '@/types/app';
 
@@ -24,6 +25,7 @@ export interface MilestonePreviewResult {
     status: string;
     tradeType: string;
   } | null;
+  tradeDetails?: TradeDetailsItem;
   milestones?: NormalizedGeminiMilestones;
 }
 
@@ -81,6 +83,7 @@ export async function previewGeminiMilestones(
           tradeType: matched.trade_type,
         }
       : null,
+    tradeDetails: parsed.data.tradeDetails,
     milestones: parsed.data,
   };
 }

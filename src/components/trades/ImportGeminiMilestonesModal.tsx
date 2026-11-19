@@ -33,32 +33,36 @@ const EXAMPLE_GEMINI_JSON = `{
   "schema_version": "1.0",
   "source": "gemini_trading_skill",
   "updated_at": "2026-11-19T15:10:00+05:30",
-  "symbol": "PPLPHARMA",
+  "portfolio_owner": "me",
+  "broker": "ZERODHA",
   "exchange": "NSE",
-  "trading_type": "CNC",
+  "symbol": "PPLPHARMA",
+  "trade_type": "SWING",
   "direction": "LONG",
   "entry_price": 239.94,
   "initial_stop_loss": 230.50,
+  "quantity": 30,
+  "strategy": "Swing",
   "milestones": {
     "milestone_1": {
       "target_price": 254.10,
       "status": "PENDING",
-      "trailing_stop_loss": null
+      "trailing_stop_loss": 241.00
     },
     "milestone_2": {
       "target_price": 258.85,
       "status": "PENDING",
-      "trailing_stop_loss": null
+      "trailing_stop_loss": 254.10
     },
     "milestone_3": {
       "target_price": 266.40,
       "status": "PENDING",
-      "trailing_stop_loss": null
+      "trailing_stop_loss": 258.85
     }
   },
   "last_reached_milestone": null,
   "current_trailing_stop_loss": null,
-  "notes": "Filled 30 shares at 239.94. M1=254.10, M2=258.85, M3=266.40."
+  "notes": "Filled 30 shares at 239.94 (15:08:41 IST). On M1 (254.10), trail stop to SL2 Estimated Net Breakeven (241.00); on M2 (258.85), trail stop to SL3 (254.10); M3 target at 266.40."
 }`;
 
 export function ImportGeminiMilestonesModal({
@@ -76,6 +80,7 @@ export function ImportGeminiMilestonesModal({
   const [preview, setPreview] = useState<MilestonePreviewResult | null>(null);
   const [isValidating, setIsValidating] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
+  const [isCreatingTrade, setIsCreatingTrade] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -144,6 +149,43 @@ export function ImportGeminiMilestonesModal({
       setPreview(null);
     } finally {
       setIsValidating(false);
+    }
+  };
+
+  const handleCreateNewTrade = async () => {
+    if (!jsonText.trim()) {
+      setError('Please provide JSON trade text.');
+      return;
+    }
+
+    setIsCreatingTrade(true);
+    setError('');
+
+    try {
+      const res = await fetch('/api/trades/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonText }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to import new trade');
+      }
+
+      toast.success(
+        `Trade ${preview?.milestones?.symbol || ''} created with Gemini milestones & trailing stops!`
+      );
+
+      queryClient.invalidateQueries({ queryKey: ['trades'] });
+      queryClient.invalidateQueries({ queryKey: ['capital-summary'] });
+
+      onSuccess?.();
+      onClose();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setIsCreatingTrade(false);
     }
   };
 
@@ -252,7 +294,7 @@ export function ImportGeminiMilestonesModal({
 
           <textarea
             rows={7}
-            placeholder={`Paste Gemini JSON here...\n{\n  "symbol": "PPLPHARMA",\n  "milestones": {\n    "milestone_1": { "target_price": 254.10, "status": "PENDING", "trailing_stop_loss": null },\n    "milestone_2": { "target_price": 258.85, "status": "PENDING", "trailing_stop_loss": null },\n    "milestone_3": { "target_price": 266.40, "status": "PENDING", "trailing_stop_loss": null }\n  },\n  "current_trailing_stop_loss": null\n}`}
+            placeholder={`Paste Gemini JSON here...\n{\n  "schema_version": "1.0",\n  "source": "gemini_trading_skill",\n  "portfolio_owner": "me",\n  "broker": "ZERODHA",\n  "symbol": "PPLPHARMA",\n  "trade_type": "SWING",\n  "direction": "LONG",\n  "entry_price": 239.94,\n  "initial_stop_loss": 230.50,\n  "quantity": 30,\n  "milestones": {\n    "milestone_1": { "target_price": 254.10, "status": "PENDING", "trailing_stop_loss": 241.00 },\n    "milestone_2": { "target_price": 258.85, "status": "PENDING", "trailing_stop_loss": 254.10 },\n    "milestone_3": { "target_price": 266.40, "status": "PENDING", "trailing_stop_loss": 258.85 }\n  },\n  "current_trailing_stop_loss": null\n}`}
             value={jsonText}
             onChange={(e) => {
               setJsonText(e.target.value);
@@ -311,11 +353,50 @@ export function ImportGeminiMilestonesModal({
                   <span className="text-[var(--muted)]"> ({preview.matchedTrade.ownerName})</span>
                 </div>
               ) : (
-                <span className="text-xs text-amber-500 font-semibold">
-                  ⚠️ No exact matching trade found automatically. Select one above.
-                </span>
+                <div className="text-right">
+                  <span className="text-xs text-amber-500 font-semibold block">
+                    ⚠️ No exact matching trade found automatically.
+                  </span>
+                  <span className="text-[10px] text-[var(--muted)]">
+                    Select one above or import as a new trade below.
+                  </span>
+                </div>
               )}
             </div>
+
+            {/* Trade Details Grid (Owner, Broker, Direction, Entry Price × Qty, Initial SL) */}
+            {preview.tradeDetails && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-2xl bg-[var(--card)] border border-[var(--border)] text-xs">
+                <div>
+                  <span className="text-[10px] text-[var(--muted)] block">Portfolio Owner</span>
+                  <span className="font-semibold text-[var(--foreground)]">
+                    {preview.tradeDetails.portfolioOwner === 'me'
+                      ? 'Husband (Admin)'
+                      : preview.tradeDetails.portfolioOwner === 'spouse'
+                      ? 'Wife (Viewer)'
+                      : preview.tradeDetails.portfolioOwner}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-[var(--muted)] block">Broker & Product</span>
+                  <span className="font-semibold text-[var(--foreground)]">
+                    {preview.tradeDetails.broker} • {preview.tradeDetails.tradeType}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-[var(--muted)] block">Entry Price × Qty</span>
+                  <span className="font-mono font-semibold text-[var(--foreground)]">
+                    {preview.tradeDetails.entryPrice ? formatINR(preview.tradeDetails.entryPrice) : '—'} × {preview.tradeDetails.quantity ?? '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-[var(--muted)] block">Initial Stop-Loss</span>
+                  <span className="font-mono font-semibold text-rose-400">
+                    {preview.tradeDetails.initialStopLoss ? formatINR(preview.tradeDetails.initialStopLoss) : '—'}
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Milestones 1, 2, 3 Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -396,22 +477,37 @@ export function ImportGeminiMilestonesModal({
         )}
 
         {/* Modal Actions */}
-        <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[var(--border)]">
+        <div className="flex flex-wrap items-center justify-end gap-2.5 pt-3 border-t border-[var(--border)]">
           <button
             type="button"
             onClick={onClose}
-            disabled={isApplying}
+            disabled={isApplying || isCreatingTrade}
             className="px-4 py-2.5 rounded-2xl border border-[var(--border)] text-xs font-semibold hover:bg-[var(--background)] transition-colors"
           >
             Cancel
           </button>
+
+          {/* Option A: Import as brand new trade with milestones (available when entry price & quantity exist) */}
+          {preview?.tradeDetails?.entryPrice != null && (
+            <button
+              type="button"
+              onClick={handleCreateNewTrade}
+              disabled={isCreatingTrade || isApplying}
+              className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-xs shadow-md hover:shadow-lg transition-all disabled:opacity-50 flex items-center gap-1.5"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>{isCreatingTrade ? 'Importing Trade...' : 'Import as New Trade'}</span>
+            </button>
+          )}
+
+          {/* Option B: Apply milestones to existing trade (when matched or selected) */}
           <button
             type="button"
             onClick={handleApply}
-            disabled={isApplying || !preview?.milestones || (!selectedTradeId && !preview.matchedTrade)}
+            disabled={isApplying || isCreatingTrade || !preview?.milestones || (!selectedTradeId && !preview?.matchedTrade)}
             className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-rose-500 to-purple-600 hover:from-rose-600 hover:to-purple-700 text-white font-semibold text-xs shadow-md hover:shadow-lg transition-all disabled:opacity-50 flex items-center gap-1.5"
           >
-            {isApplying ? 'Applying...' : 'Confirm & Apply Milestones'}
+            {isApplying ? 'Applying...' : 'Apply to Existing Trade'}
           </button>
         </div>
       </div>
