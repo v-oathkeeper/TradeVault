@@ -111,8 +111,8 @@ const SetInitialCapitalModal = dynamic(
   { ssr: false }
 );
 
-const ImportGeminiMilestonesModal = dynamic(
-  () => import('@/components/trades/ImportGeminiMilestonesModal').then((m) => m.ImportGeminiMilestonesModal),
+const ImportTradeModal = dynamic(
+  () => import('@/components/trades/ImportTradeModal').then((m) => m.ImportTradeModal),
   { ssr: false }
 );
 
@@ -142,7 +142,7 @@ export function DashboardClient({
   const [showAddMoney, setShowAddMoney] = useState(false);
   const [showWithdrawMoney, setShowWithdrawMoney] = useState(false);
   const [showSetInitialCapital, setShowSetInitialCapital] = useState(false);
-  const [showGeminiImport, setShowGeminiImport] = useState(false);
+  const [showImportTrade, setShowImportTrade] = useState(false);
   const [showSaveCelebration, setShowSaveCelebration] = useState(false);
 
   // Apply the dashboard's portfolio and date filters consistently to its KPIs,
@@ -308,12 +308,12 @@ export function DashboardClient({
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => setShowGeminiImport(true)}
+                onClick={() => setShowImportTrade(true)}
                 className="dashboard-action inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2.5 text-xs font-semibold text-[var(--sidebar-fg)] shadow-sm hover:border-white/25 hover:bg-white/10"
-                title="Import Gemini Milestones"
+                title="Import Trade with Milestones"
               >
                 <Sparkles className="dashboard-action-icon w-4 h-4 text-purple-300" />
-                <span>Import Gemini</span>
+                <span>Import Trade</span>
               </button>
               <button
                 type="button"
@@ -501,16 +501,10 @@ export function DashboardClient({
             husbandId={husbandSummary?.portfolioOwnerId}
             wifeId={wifeSummary?.portfolioOwnerId}
           />
-          <ImportGeminiMilestonesModal
-            open={showGeminiImport}
-            onClose={() => setShowGeminiImport(false)}
+          <ImportTradeModal
+            open={showImportTrade}
+            onClose={() => setShowImportTrade(false)}
             onSuccess={handleMutationSuccess}
-            availableTrades={initialTrades.map((t) => ({
-              id: t.id,
-              symbol: t.symbol,
-              entryPrice: t.entryPrice,
-              status: t.status,
-            }))}
           />
         </>
       )}

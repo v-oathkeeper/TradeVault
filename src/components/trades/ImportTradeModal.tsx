@@ -495,34 +495,76 @@ export function ImportTradeModal({ open, onClose, onSuccess }: ImportTradeModalP
 
                         {/* Gemini Milestones & Trailing Stops (when present) */}
                         {item.milestone1_target != null && (
-                          <div className="p-2.5 rounded-xl bg-purple-500/5 border border-purple-500/15 flex flex-wrap items-center gap-3 text-[11px] font-mono">
-                            <span className="font-semibold text-purple-400 font-sans flex items-center gap-1">
-                              <Sparkles className="w-3 h-3" /> Milestones:
-                            </span>
-                            {item.milestone1_target != null && (
-                              <span>
-                                <strong className="text-[var(--foreground)]">M1:</strong> {formatINR(item.milestone1_target)}
-                                {item.milestone1_trailing_sl != null && (
-                                  <span className="text-rose-400"> (Trail: {formatINR(item.milestone1_trailing_sl)})</span>
-                                )}
+                          <div className="p-3 rounded-2xl bg-gradient-to-br from-purple-500/5 via-rose-500/5 to-transparent border border-purple-500/20 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-purple-400 flex items-center gap-1.5">
+                                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                                <span>Milestones & Planned Trailing Stop-Loss</span>
                               </span>
-                            )}
-                            {item.milestone2_target != null && (
-                              <span>
-                                <strong className="text-[var(--foreground)]">M2:</strong> {formatINR(item.milestone2_target)}
-                                {item.milestone2_trailing_sl != null && (
-                                  <span className="text-rose-400"> (Trail: {formatINR(item.milestone2_trailing_sl)})</span>
-                                )}
-                              </span>
-                            )}
-                            {item.milestone3_target != null && (
-                              <span>
-                                <strong className="text-[var(--foreground)]">M3:</strong> {formatINR(item.milestone3_target)}
-                                {item.milestone3_trailing_sl != null && (
-                                  <span className="text-rose-400"> (Trail: {formatINR(item.milestone3_trailing_sl)})</span>
-                                )}
-                              </span>
-                            )}
+                              {item.current_trailing_sl != null && (
+                                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                                  Active Trail: {formatINR(item.current_trailing_sl)}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                              {[
+                                {
+                                  title: 'Milestone 1',
+                                  target: item.milestone1_target,
+                                  status: item.milestone1_status || 'PENDING',
+                                  trail: item.milestone1_trailing_sl,
+                                },
+                                {
+                                  title: 'Milestone 2',
+                                  target: item.milestone2_target,
+                                  status: item.milestone2_status || 'PENDING',
+                                  trail: item.milestone2_trailing_sl,
+                                },
+                                {
+                                  title: 'Milestone 3',
+                                  target: item.milestone3_target,
+                                  status: item.milestone3_status || 'PENDING',
+                                  trail: item.milestone3_trailing_sl,
+                                },
+                              ].map((ms, idx) => (
+                                <div
+                                  key={idx}
+                                  className="p-2.5 rounded-xl bg-[var(--background)] border border-[var(--border)] space-y-1"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[9px] font-bold uppercase tracking-wider text-[var(--muted)]">
+                                      {ms.title}
+                                    </span>
+                                    <span
+                                      className={cn(
+                                        'text-[9px] font-bold px-1.5 py-0.5 rounded-full',
+                                        ms.status === 'REACHED'
+                                          ? 'bg-emerald-500/10 text-emerald-400'
+                                          : ms.status === 'MISSED'
+                                          ? 'bg-rose-500/10 text-rose-400'
+                                          : 'bg-blue-500/10 text-blue-400'
+                                      )}
+                                    >
+                                      {ms.status}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="text-[9px] text-[var(--muted)] block">Target Price</span>
+                                    <span className="font-mono font-bold text-xs text-[var(--foreground)]">
+                                      {ms.target != null ? formatINR(ms.target) : '—'}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="text-[9px] text-[var(--muted)] block">Trailing Stop-Loss</span>
+                                    <span className="font-mono font-semibold text-[11px] text-rose-400">
+                                      {ms.trail != null ? formatINR(ms.trail) : '—'}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
 

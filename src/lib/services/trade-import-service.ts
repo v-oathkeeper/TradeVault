@@ -843,6 +843,86 @@ export async function executeTradeImport({
     for (const item of validList) {
       const now = new Date().toISOString();
 
+      // Check if this payload is targeting an existing trade (by explicit trade_id)
+      const rawInput = item.raw_gemini_input as Record<string, unknown> | undefined;
+      const explicitTradeId = (rawInput?.trade_id || rawInput?.tradeId || rawInput?.id) as
+        | string
+        | undefined;
+
+      if (explicitTradeId && UUID_REGEX.test(explicitTradeId)) {
+        const { data: existingTrade } = await supabase
+          .from('trades')
+          .select('id, current_stop_loss')
+          .eq('id', explicitTradeId)
+          .eq('household_id', householdId)
+          .single();
+
+        if (existingTrade) {
+          const updatePayload: Record<string, unknown> = {
+            milestone1_target: item.milestone1_target ?? null,
+            milestone1_status: item.milestone1_status ?? null,
+            milestone1_trailing_sl: item.milestone1_trailing_sl ?? null,
+            milestone2_target: item.milestone2_target ?? null,
+            milestone2_status: item.milestone2_status ?? null,
+            milestone2_trailing_sl: item.milestone2_trailing_sl ?? null,
+            milestone3_target: item.milestone3_target ?? null,
+            milestone3_status: item.milestone3_status ?? null,
+            milestone3_trailing_sl: item.milestone3_trailing_sl ?? null,
+            current_trailing_sl: item.current_trailing_sl ?? null,
+            last_reached_milestone: item.last_reached_milestone ?? null,
+            milestones_updated_at: item.milestones_updated_at ?? now,
+            notes: item.notes ?? undefined,
+            updated_at: now,
+          };
+
+          if (item.current_trailing_sl != null) {
+            updatePayload.current_stop_loss = item.current_trailing_sl;
+            await supabase.from('stop_loss_history').insert({
+              trade_id: existingTrade.id,
+              previous_stop: existingTrade.current_stop_loss,
+              new_stop: item.current_trailing_sl,
+              stop_type: 'TRAIL',
+              notes: item.notes ? `AI update: ${item.notes}` : 'AI milestone trailing SL update',
+              created_by: userId,
+              created_at: now,
+            });
+          }
+
+          await supabase
+            .from('trades')
+            .update(updatePayload as any)
+            .eq('id', existingTrade.id);
+
+          insertedTradeIds.push(existingTrade.id);
+          successful.push({ index: item.index, symbol: item.symbol, id: existingTrade.id });
+
+          try {
+            await (supabase as any).from('trade_milestone_history').insert({
+              trade_id: existingTrade.id,
+              milestone1_target: item.milestone1_target ?? null,
+              milestone1_status: item.milestone1_status ?? 'PENDING',
+              milestone1_trailing_sl: item.milestone1_trailing_sl ?? null,
+              milestone2_target: item.milestone2_target ?? null,
+              milestone2_status: item.milestone2_status ?? 'PENDING',
+              milestone2_trailing_sl: item.milestone2_trailing_sl ?? null,
+              milestone3_target: item.milestone3_target ?? null,
+              milestone3_status: item.milestone3_status ?? 'PENDING',
+              milestone3_trailing_sl: item.milestone3_trailing_sl ?? null,
+              current_trailing_sl: item.current_trailing_sl ?? null,
+              last_reached_milestone: item.last_reached_milestone ?? null,
+              notes: item.notes ?? null,
+              raw_gemini_input: item.raw_gemini_input ?? null,
+              created_by: userId,
+              created_at: item.milestones_updated_at ?? now,
+            });
+          } catch (mErr) {
+            console.warn('Could not record milestone history on trade update:', mErr);
+          }
+
+          continue;
+        }
+      }
+
       const { data: trade, error: insertError } = await supabase
         .from('trades')
         .insert({
