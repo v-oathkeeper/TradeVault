@@ -96,8 +96,8 @@ export function resolvePortfolioOwner(
     return { person: householdPersons[0] };
   }
 
-  // 2. Resolve 'spouse'
-  if (lower === 'spouse') {
+  // 2. Resolve 'spouse' or 'wife'
+  if (lower === 'spouse' || lower === 'wife') {
     if (userRole === 'ADMIN') {
       const wife = householdPersons.find(
         (p) =>
@@ -121,7 +121,7 @@ export function resolvePortfolioOwner(
       );
       if (husband) return { person: husband };
     }
-    return { error: 'Spouse portfolio owner not found in household' };
+    return { error: 'Wife / spouse portfolio owner not found in household' };
   }
 
   // 3. Resolve by permanent UUID

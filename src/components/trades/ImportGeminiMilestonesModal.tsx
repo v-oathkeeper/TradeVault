@@ -370,9 +370,9 @@ export function ImportGeminiMilestonesModal({
                 <div>
                   <span className="text-[10px] text-[var(--muted)] block">Portfolio Owner</span>
                   <span className="font-semibold text-[var(--foreground)]">
-                    {preview.tradeDetails.portfolioOwner === 'me'
+                    {preview.tradeDetails.portfolioOwner.toLowerCase() === 'me' || preview.tradeDetails.portfolioOwner.toLowerCase() === 'husband'
                       ? 'Husband (Admin)'
-                      : preview.tradeDetails.portfolioOwner === 'spouse'
+                      : preview.tradeDetails.portfolioOwner.toLowerCase() === 'spouse' || preview.tradeDetails.portfolioOwner.toLowerCase() === 'wife'
                       ? 'Wife (Viewer)'
                       : preview.tradeDetails.portfolioOwner}
                   </span>
