@@ -14,7 +14,6 @@ export const metadata = {
 
 export default async function AnalyticsPage() {
   const appContext = await getHouseholdAppContext();
-  if (!appContext) return null;
 
   const supabase = await createSupabaseServerClient();
 
@@ -32,8 +31,7 @@ export default async function AnalyticsPage() {
       .order('entry_at', { ascending: false });
 
     if (error) {
-      console.error('[AnalyticsPage] Error fetching trades:', error.message);
-      return [];
+      throw new Error(`Failed to load analytics trades: ${error.message}`);
     }
     return data || [];
   });
@@ -55,12 +53,12 @@ export default async function AnalyticsPage() {
       direction: t.direction,
       quantity: t.quantity,
       entryPrice: Number(t.entry_price),
-      exitPrice: t.exit_price ? Number(t.exit_price) : null,
+      exitPrice: t.exit_price != null ? Number(t.exit_price) : null,
       entryAt: t.entry_at,
       exitAt: t.exit_at,
-      grossPnl: t.gross_pnl ? Number(t.gross_pnl) : null,
+      grossPnl: t.gross_pnl != null ? Number(t.gross_pnl) : null,
       totalCharges: Number(t.total_charges ?? 0),
-      netPnl: t.net_pnl ? Number(t.net_pnl) : null,
+      netPnl: t.net_pnl != null ? Number(t.net_pnl) : null,
       chargesBreakdown: null,
       calculationStatus: t.calculation_status,
       status: t.status,
@@ -69,9 +67,9 @@ export default async function AnalyticsPage() {
       updatedBy: null,
       createdAt: t.entry_at,
       updatedAt: t.entry_at,
-      initialStopLoss: t.initial_stop_loss ? Number(t.initial_stop_loss) : null,
-      currentStopLoss: t.current_stop_loss ? Number(t.current_stop_loss) : null,
-      initialRiskRupees: t.initial_risk_rupees ? Number(t.initial_risk_rupees) : null,
+      initialStopLoss: t.initial_stop_loss != null ? Number(t.initial_stop_loss) : null,
+      currentStopLoss: t.current_stop_loss != null ? Number(t.current_stop_loss) : null,
+      initialRiskRupees: t.initial_risk_rupees != null ? Number(t.initial_risk_rupees) : null,
       realizedRMultiple: null,
       portfolioOwner: person
         ? {

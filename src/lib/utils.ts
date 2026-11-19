@@ -52,6 +52,15 @@ export function formatPercent(value: number, decimals: number = 1): string {
   return `${value.toFixed(decimals)}%`;
 }
 
+/** Format an ISO timestamp for an HTML datetime-local input in the browser's local timezone. */
+export function toLocalDateTimeInputValue(value?: string | Date | null): string {
+  const date = value == null ? new Date() : value instanceof Date ? value : new Date(value);
+  if (isNaN(date.getTime())) return '';
+
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 16);
+}
+
 /**
  * Format date in Indian context (DD MMM YYYY or DD/MM/YYYY HH:mm)
  */
@@ -67,6 +76,7 @@ export function formatDate(
     day: '2-digit',
     month: 'short',
     year: 'numeric',
+    timeZone: 'Asia/Kolkata',
     ...(options?.includeTime && {
       hour: '2-digit',
       minute: '2-digit',

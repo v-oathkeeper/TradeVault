@@ -294,9 +294,7 @@ export function calculateCapitalSummary(
  * Can reuse pre-fetched `persons` and `trades` from page components to eliminate
  * redundant network round trips, or queries them cleanly.
  *
- * If the PostgreSQL view `v_capital_summary` is not yet available, this automatically
- * and seamlessly derives exact figures from canonical `trades` and `capital_transactions`
- * without throwing errors or displaying missing schema warnings.
+ * All figures are derived from canonical `trades` and `capital_transactions` rows.
  */
 export async function getHouseholdCapitalSummary(
   householdId: string,
@@ -340,10 +338,13 @@ export async function getHouseholdCapitalSummary(
         net_pnl: t.netPnl,
       }));
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('capital_transactions')
         .select('*')
         .eq('household_id', householdId);
+      if (error) {
+        throw new Error(`Failed to fetch capital transactions: ${error.message}`);
+      }
       txRows = (data as CapitalTransactionRow[]) ?? null;
     } else {
       const [tradesRes, txRes] = await Promise.all([
@@ -358,11 +359,65 @@ export async function getHouseholdCapitalSummary(
           .eq('household_id', householdId),
       ]);
 
+      if (tradesRes.error) {
+        throw new Error(`Failed to fetch closed trades: ${tradesRes.error.message}`);
+      }
+      if (txRes.error) {
+        throw new Error(`Failed to fetch capital transactions: ${txRes.error.message}`);
+      }
+
       closedTrades = (tradesRes.data ?? []) as TradeItem[];
       txRows = (txRes.data as CapitalTransactionRow[]) ?? null;
     }
 
     return calculateCapitalSummary(householdId, persons, closedTrades, txRows);
+  });
+}
+
+/** Fetch the capital page's summary and recent history from one ledger read. */
+export async function getCapitalPageData(
+  householdId: string,
+  persons: { id: string; displayName: string; relationshipLabel: string }[]
+): Promise<{
+  summary: HouseholdCapitalSummary;
+  transactions: CapitalTransaction[];
+  total: number;
+}> {
+  return measureAsync('getCapitalPageData', async () => {
+    const supabase = await createSupabaseServerClient();
+    const [tradesResult, ledgerResult] = await Promise.all([
+      supabase
+        .from('trades')
+        .select('portfolio_owner_id, trade_type, net_pnl')
+        .eq('household_id', householdId)
+        .eq('status', 'CLOSED'),
+      supabase
+        .from('capital_transactions')
+        .select('*')
+        .eq('household_id', householdId)
+        .order('tx_date', { ascending: false })
+        .order('created_at', { ascending: false }),
+    ]);
+
+    if (tradesResult.error) {
+      throw new Error(`Failed to fetch closed trades: ${tradesResult.error.message}`);
+    }
+    if (ledgerResult.error) {
+      throw new Error(`Failed to fetch capital transactions: ${ledgerResult.error.message}`);
+    }
+
+    const closedTrades = (tradesResult.data ?? []) as {
+      portfolio_owner_id: string;
+      trade_type: string;
+      net_pnl: number | string | null;
+    }[];
+    const ledgerRows = (ledgerResult.data ?? []) as CapitalTransactionRow[];
+
+    return {
+      summary: calculateCapitalSummary(householdId, persons, closedTrades, ledgerRows),
+      transactions: ledgerRows.slice(0, 50).map(mapRow),
+      total: ledgerRows.length,
+    };
   });
 }
 
@@ -405,10 +460,6 @@ export async function getCapitalTransactions(
     const { data, error, count } = await query;
 
     if (error) {
-      // Return empty list gracefully if table is not yet created
-      if (error.code === 'PGRST205') {
-        return { transactions: [], total: 0 };
-      }
       throw new Error(`Failed to fetch capital transactions: ${error.message}`);
     }
 
@@ -592,11 +643,16 @@ export async function setInitialCapital(
   const today = new Date().toISOString().split('T')[0];
 
   // 1. Fetch all INITIAL_ALLOCATION and reversal records for this owner
-  const { data: allTx } = await supabase
+  const { data: allTx, error: fetchError } = await supabase
     .from('capital_transactions')
     .select('id, tx_type, amount, reversal_of')
     .eq('household_id', householdId)
-    .eq('portfolio_owner_id', portfolioOwnerId);
+    .eq('portfolio_owner_id', portfolioOwnerId)
+    .eq('tx_type', 'INITIAL_ALLOCATION');
+
+  if (fetchError) {
+    throw new Error(`Failed to load previous initial capital records: ${fetchError.message}`);
+  }
 
   const reversedIds = new Set(
     (allTx || [])
@@ -609,36 +665,47 @@ export async function setInitialCapital(
     (t) => t.tx_type === 'INITIAL_ALLOCATION' && !t.reversal_of && !reversedIds.has(t.id)
   );
 
-  // 2. Reverse previous active INITIAL_ALLOCATION records to preserve audit trail
-  for (const existing of activeInitialRecords) {
-    await supabase
-      .from('capital_transactions')
-      .insert({
-        household_id: householdId,
-        portfolio_owner_id: portfolioOwnerId,
-        strategy_bucket: 'INTRADAY',
-        tx_type: 'INITIAL_ALLOCATION',
-        amount: existing.amount,
-        tx_date: today,
-        created_by: userId,
-        notes: `REVERSAL: Initial capital updated to ₹${amount.toLocaleString('en-IN')}`,
-        reversal_of: existing.id,
-      });
-  }
+  // Batch reversal rows and the replacement allocation into one PostgREST
+  // insert instead of waiting on one network request per historical record.
+  const rowsToInsert = activeInitialRecords.map((existing) => ({
+    household_id: householdId,
+    portfolio_owner_id: portfolioOwnerId,
+    strategy_bucket: 'INTRADAY' as const,
+    tx_type: 'INITIAL_ALLOCATION' as const,
+    amount: existing.amount,
+    tx_date: today,
+    created_by: userId,
+    notes: `REVERSAL: Initial capital updated to ₹${amount.toLocaleString('en-IN')}`,
+    reversal_of: existing.id as string | null,
+  }));
 
-  // 3. If amount > 0, insert the new INITIAL_ALLOCATION record
   if (amount > 0) {
-    return createCapitalTransaction(householdId, userId, {
-      portfolioOwnerId,
-      strategyBucket: 'INTRADAY',
-      txType: 'INITIAL_ALLOCATION',
+    rowsToInsert.push({
+      household_id: householdId,
+      portfolio_owner_id: portfolioOwnerId,
+      strategy_bucket: 'INTRADAY',
+      tx_type: 'INITIAL_ALLOCATION',
       amount,
-      txDate: today,
+      tx_date: today,
+      created_by: userId,
       notes: notes || `Initial invested capital set to ₹${amount.toLocaleString('en-IN')}`,
+      reversal_of: null,
     });
   }
 
-  return null;
+  if (rowsToInsert.length === 0) return null;
+
+  const { data: insertedRows, error: insertError } = await supabase
+    .from('capital_transactions')
+    .insert(rowsToInsert)
+    .select();
+
+  if (insertError) {
+    throw new Error(`Failed to update initial capital: ${insertError.message}`);
+  }
+
+  const allocation = insertedRows?.find((row) => row.reversal_of == null);
+  return allocation ? mapRow(allocation as CapitalTransactionRow) : null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

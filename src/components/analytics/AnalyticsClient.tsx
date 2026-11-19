@@ -40,6 +40,17 @@ import { useUser } from '@/components/providers/UserContext';
 import { formatINR, cn } from '@/lib/utils';
 import type { Trade, MonthlyPnl } from '@/types/app';
 
+const monthKeyFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Kolkata',
+  year: 'numeric',
+  month: '2-digit',
+});
+const monthLabelFormatter = new Intl.DateTimeFormat('en-IN', {
+  month: 'short',
+  year: '2-digit',
+  timeZone: 'Asia/Kolkata',
+});
+
 interface AnalyticsClientProps {
   initialTrades: Trade[];
 }
@@ -164,13 +175,11 @@ export function AnalyticsClient({ initialTrades }: AnalyticsClientProps) {
     closedTrades.forEach((t) => {
       if (!t.exitAt) return;
       const date = new Date(t.exitAt);
-      const year = date.getFullYear();
-      const month = date.getMonth();
+      const dateParts = monthKeyFormatter.formatToParts(date);
+      const year = Number(dateParts.find((part) => part.type === 'year')?.value);
+      const month = Number(dateParts.find((part) => part.type === 'month')?.value) - 1;
       const key = `${year}-${String(month + 1).padStart(2, '0')}`;
-      const label = date.toLocaleDateString('en-IN', {
-        month: 'short',
-        year: '2-digit',
-      });
+      const label = monthLabelFormatter.format(date);
 
       const existing = monthMap.get(key) ?? {
         year,

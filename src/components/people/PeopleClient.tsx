@@ -8,10 +8,19 @@ import { PnlDisplay } from '@/components/ui/PnlDisplay';
 import { formatINR } from '@/lib/utils';
 import { useUser } from '@/components/providers/UserContext';
 import { toast } from 'sonner';
-import type { Trade } from '@/types/app';
+import type { TradeStatus } from '@/types/app';
+
+interface PersonTradeSummary {
+  portfolioOwnerId: string;
+  status: TradeStatus;
+  netPnl: number | null;
+  totalCharges: number;
+  entryPrice: number;
+  quantity: number;
+}
 
 interface PeopleClientProps {
-  initialTrades: Trade[];
+  initialTrades: PersonTradeSummary[];
 }
 
 export function PeopleClient({ initialTrades }: PeopleClientProps) {

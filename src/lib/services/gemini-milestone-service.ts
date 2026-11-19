@@ -168,7 +168,7 @@ export async function applyGeminiMilestones(
     updatePayload.current_stop_loss = currentTrailingSl;
 
     // Also record in stop_loss_history for the audit trail
-    const prevStop = existingTrade.current_stop_loss ? Number(existingTrade.current_stop_loss) : null;
+    const prevStop = existingTrade.current_stop_loss != null ? Number(existingTrade.current_stop_loss) : null;
     await supabase.from('stop_loss_history').insert({
       trade_id: tradeId,
       previous_stop: prevStop,
@@ -217,16 +217,16 @@ export async function getTradeMilestoneHistory(
   return (data ?? []).map((row: any) => ({
     id: row.id,
     tradeId: row.trade_id,
-    milestone1Target: row.milestone1_target ? Number(row.milestone1_target) : null,
+    milestone1Target: row.milestone1_target != null ? Number(row.milestone1_target) : null,
     milestone1Status: row.milestone1_status,
-    milestone1TrailingSl: row.milestone1_trailing_sl ? Number(row.milestone1_trailing_sl) : null,
-    milestone2Target: row.milestone2_target ? Number(row.milestone2_target) : null,
+    milestone1TrailingSl: row.milestone1_trailing_sl != null ? Number(row.milestone1_trailing_sl) : null,
+    milestone2Target: row.milestone2_target != null ? Number(row.milestone2_target) : null,
     milestone2Status: row.milestone2_status,
-    milestone2TrailingSl: row.milestone2_trailing_sl ? Number(row.milestone2_trailing_sl) : null,
-    milestone3Target: row.milestone3_target ? Number(row.milestone3_target) : null,
+    milestone2TrailingSl: row.milestone2_trailing_sl != null ? Number(row.milestone2_trailing_sl) : null,
+    milestone3Target: row.milestone3_target != null ? Number(row.milestone3_target) : null,
     milestone3Status: row.milestone3_status,
-    milestone3TrailingSl: row.milestone3_trailing_sl ? Number(row.milestone3_trailing_sl) : null,
-    currentTrailingSl: row.current_trailing_sl ? Number(row.current_trailing_sl) : null,
+    milestone3TrailingSl: row.milestone3_trailing_sl != null ? Number(row.milestone3_trailing_sl) : null,
+    currentTrailingSl: row.current_trailing_sl != null ? Number(row.current_trailing_sl) : null,
     lastReachedMilestone: row.last_reached_milestone,
     notes: row.notes,
     rawGeminiInput: row.raw_gemini_input,

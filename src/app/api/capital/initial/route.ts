@@ -11,37 +11,68 @@ import { setInitialCapital } from '@/lib/services/capital-service';
 export const POST = withAuthError(async (req: NextRequest) => {
   const ctx = await requireAdmin();
 
-  const body = await req.json();
-  const { portfolioOwnerId, amount, notes } = body;
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400 });
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return NextResponse.json({ error: 'Request body must be an object' }, { status: 400 });
+  }
+  const allocations = Array.isArray(body.allocations) ? body.allocations : [body];
 
-  if (!portfolioOwnerId || typeof amount !== 'number' || amount < 0) {
+  if (
+    allocations.length === 0 ||
+    allocations.length > 20 ||
+    allocations.some(
+      (item: any) =>
+        typeof item?.portfolioOwnerId !== 'string' ||
+        !item.portfolioOwnerId ||
+        typeof item.amount !== 'number' ||
+        !Number.isFinite(item.amount) ||
+        item.amount < 0 ||
+        (item.notes != null && typeof item.notes !== 'string')
+    )
+  ) {
     return NextResponse.json(
-      { error: 'portfolioOwnerId and a non-negative amount are required' },
+      { error: 'Each allocation needs an owner and a finite non-negative amount' },
       { status: 400 }
     );
   }
 
-  // Verify owner belongs to household
+  const ownerIds = allocations.map((item: { portfolioOwnerId: string }) => item.portfolioOwnerId);
+  if (new Set(ownerIds).size !== ownerIds.length) {
+    return NextResponse.json({ error: 'Each owner can only be included once' }, { status: 400 });
+  }
+
+  // Validate all owners in one query before writing any allocations.
   const { createSupabaseServerClient } = await import('@/lib/supabase/server');
   const supabase = await createSupabaseServerClient();
-  const { data: person } = await supabase
+  const { data: people, error: peopleError } = await supabase
     .from('persons')
     .select('id')
-    .eq('id', portfolioOwnerId)
     .eq('household_id', ctx.householdId)
     .eq('is_active', true)
-    .maybeSingle();
+    .in('id', ownerIds);
 
-  if (!person) {
+  if (peopleError) {
+    return NextResponse.json({ error: 'Unable to verify portfolio owners' }, { status: 503 });
+  }
+  if ((people ?? []).length !== ownerIds.length) {
     return NextResponse.json(
-      { error: 'Invalid portfolioOwnerId for this household' },
+      { error: 'One or more portfolio owners are invalid for this household' },
       { status: 403 }
     );
   }
 
   try {
-    const tx = await setInitialCapital(ctx.householdId, ctx.user.id, portfolioOwnerId, amount, notes);
-    return NextResponse.json({ transaction: tx }, { status: 200 });
+    const transactions = await Promise.all(
+      allocations.map((item: { portfolioOwnerId: string; amount: number; notes?: string }) =>
+        setInitialCapital(ctx.householdId, ctx.user.id, item.portfolioOwnerId, item.amount, item.notes)
+      )
+    );
+    return NextResponse.json({ transactions }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to set initial capital';
     return NextResponse.json({ error: message }, { status: 422 });

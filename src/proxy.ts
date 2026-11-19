@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { NextResponse, type NextRequest } from 'next/server';
 
 // Protected routes that require authentication
@@ -18,6 +19,10 @@ const PROTECTED_ROUTES = [
 const AUTH_ROUTES = ['/login'];
 
 const isDev = process.env.NODE_ENV === 'development';
+
+function matchesRoute(pathname: string, routes: string[]) {
+  return routes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+}
 
 /**
  * Extracts the access token string from Supabase auth cookies (handles single and chunked cookies).
@@ -84,9 +89,11 @@ export async function proxy(request: NextRequest) {
   const isPrefetch =
     request.headers.get('next-router-prefetch') === '1' ||
     request.headers.get('purpose') === 'prefetch';
+  const forceReauth =
+    pathname === '/login' && request.nextUrl.searchParams.get('reauth') === '1';
 
   // Quick bypass for API routes — they handle their own JSON authentication
-  if (pathname.startsWith('/api')) {
+  if (matchesRoute(pathname, ['/api'])) {
     const response = NextResponse.next({ request });
     if (isDev) {
       const dur = performance.now() - startTime;
@@ -108,13 +115,13 @@ export async function proxy(request: NextRequest) {
   // Fast Path 1: Unauthenticated user (Zero network round-trips)
   // ─────────────────────────────────────────────────────────────────────────────
   if (!token || !jwtPayload) {
-    if (AUTH_ROUTES.some((route) => pathname.startsWith(route))) {
+    if (matchesRoute(pathname, AUTH_ROUTES) && !forceReauth) {
       const res = NextResponse.next({ request });
       if (isDev) res.headers.set('Server-Timing', `proxy;dur=${(performance.now() - startTime).toFixed(1)}`);
       return res;
     }
 
-    if (PROTECTED_ROUTES.some((route) => pathname.startsWith(route))) {
+    if (matchesRoute(pathname, PROTECTED_ROUTES)) {
       const redirectUrl = new URL('/login', request.url);
       redirectUrl.searchParams.set('redirect', pathname);
       const res = NextResponse.redirect(redirectUrl);
@@ -132,9 +139,9 @@ export async function proxy(request: NextRequest) {
   // ─────────────────────────────────────────────────────────────────────────────
   // Fast Path 2: Active, unexpired session (Zero network round-trips for navigations & prefetches)
   // ─────────────────────────────────────────────────────────────────────────────
-  if (hasActiveSession) {
-    // If authenticated user visits /login, redirect to dashboard
-    if (AUTH_ROUTES.some((route) => pathname.startsWith(route))) {
+  if (hasActiveSession && !forceReauth) {
+    // If authenticated user visits an auth route, redirect to dashboard
+    if (matchesRoute(pathname, AUTH_ROUTES)) {
       const res = NextResponse.redirect(new URL('/dashboard', request.url));
       if (isDev) res.headers.set('Server-Timing', `proxy;dur=${(performance.now() - startTime).toFixed(1)}`);
       return res;
@@ -146,16 +153,7 @@ export async function proxy(request: NextRequest) {
       return res;
     }
 
-    // Attach verified user hint headers for downstream server components
-    const requestHeaders = new Headers(request.headers);
-    if (jwtPayload.sub) requestHeaders.set('x-user-id', jwtPayload.sub);
-    if (jwtPayload.email) requestHeaders.set('x-user-email', jwtPayload.email);
-
-    const res = NextResponse.next({
-      request: {
-        headers: requestHeaders,
-      },
-    });
+    const res = NextResponse.next({ request });
 
     const dur = performance.now() - startTime;
     res.headers.set('Server-Timing', `proxy;dur=${dur.toFixed(1)}`);
@@ -196,26 +194,68 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user: SupabaseUser | null = null;
+  let authError: { code?: string; status?: number; message?: string } | null = null;
+  try {
+    const result = await supabase.auth.getUser();
+    user = result.data.user;
+    authError = result.error;
+  } catch {
+    // A temporary Auth service failure must fail closed without becoming a 500.
+    return NextResponse.json(
+      { error: 'Authentication service is temporarily unavailable' },
+      { status: 503, headers: { 'Retry-After': '5' } }
+    );
+  }
+
+  const invalidRefreshToken =
+    !!authError &&
+    (authError.code === 'refresh_token_not_found' ||
+      authError.code === 'invalid_refresh_token' ||
+      (authError.status === 400 && /refresh token/i.test(authError.message ?? '')));
+  const invalidSession =
+    !!authError &&
+    (invalidRefreshToken || authError.status === 400 || authError.status === 401 || authError.status === 403);
+
+  if (authError && !invalidSession) {
+    return NextResponse.json(
+      { error: 'Authentication service is temporarily unavailable' },
+      { status: 503, headers: { 'Retry-After': '5' } }
+    );
+  }
+
+  const clearInvalidSession = (response: NextResponse) => {
+    if (invalidSession) {
+      for (const cookie of allCookies) {
+        if (cookie.name.startsWith('sb-') && cookie.name.includes('-auth-token')) {
+          response.cookies.set(cookie.name, '', {
+            path: '/',
+            maxAge: 0,
+            expires: new Date(0),
+            sameSite: 'lax',
+          });
+        }
+      }
+    }
+    return response;
+  };
 
   // Redirect authenticated users away from auth pages
-  if (user && AUTH_ROUTES.some((route) => pathname.startsWith(route))) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+  if (user && matchesRoute(pathname, AUTH_ROUTES) && !forceReauth) {
+    return clearInvalidSession(NextResponse.redirect(new URL('/dashboard', request.url)));
   }
 
   // Redirect unauthenticated users from protected routes to login
-  if (!user && PROTECTED_ROUTES.some((route) => pathname.startsWith(route))) {
+  if (!user && matchesRoute(pathname, PROTECTED_ROUTES)) {
     const redirectUrl = new URL('/login', request.url);
     redirectUrl.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(redirectUrl);
+    return clearInvalidSession(NextResponse.redirect(redirectUrl));
   }
 
   // Redirect root to dashboard or login
   if (pathname === '/') {
-    return NextResponse.redirect(
-      new URL(user ? '/dashboard' : '/login', request.url)
+    return clearInvalidSession(
+      NextResponse.redirect(new URL(user ? '/dashboard' : '/login', request.url))
     );
   }
 
@@ -225,10 +265,8 @@ export async function proxy(request: NextRequest) {
     console.log(`[PERF:proxy] Refresh-path ${pathname}: ${dur.toFixed(1)}ms`);
   }
 
-  return supabaseResponse;
+  return clearInvalidSession(supabaseResponse);
 }
-
-export const middleware = proxy;
 
 export const config = {
   matcher: [

@@ -194,6 +194,7 @@ body {
   *::after {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }
 
@@ -286,6 +287,11 @@ input[type="number"] {
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes slide-up-compact {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @keyframes slide-down {
   from { opacity: 0; transform: translateY(-14px); }
   to { opacity: 1; transform: translateY(0); }
@@ -322,6 +328,22 @@ input[type="number"] {
 @keyframes gentle-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+@keyframes coin-bob {
+  0%, 100% { transform: translateY(0) rotate(-8deg); }
+  50% { transform: translateY(-4px) rotate(8deg); }
+}
+
+@keyframes sparkle-pop {
+  0%, 100% { opacity: 0; transform: scale(0.5) rotate(-25deg); }
+  45%, 65% { opacity: 1; transform: scale(1) rotate(10deg); }
+}
+
+@keyframes icon-wiggle {
+  0%, 100% { transform: rotate(0); }
+  35% { transform: rotate(-12deg); }
+  70% { transform: rotate(10deg); }
 }
 
 /* Animation utilities with will-change-aware transitions */
@@ -361,6 +383,23 @@ input[type="number"] {
   animation: gentle-spin 12s linear infinite;
 }
 
+.animate-coin-bob {
+  animation: coin-bob 2.8s ease-in-out infinite;
+}
+
+.animate-sparkle-pop {
+  animation: sparkle-pop 2.8s ease-in-out infinite;
+}
+
+.dashboard-action {
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 180ms ease,
+              background-color 180ms ease;
+}
+.dashboard-action:active {
+  transform: translateY(0) scale(0.97);
+}
+
 /* Micro-interaction Stagger Delays */
 .stagger-1 { animation-delay: 0.04s; }
 .stagger-2 { animation-delay: 0.08s; }
@@ -369,18 +408,60 @@ input[type="number"] {
 .stagger-5 { animation-delay: 0.20s; }
 .stagger-6 { animation-delay: 0.24s; }
 
+@media (max-width: 640px) {
+  .animate-slide-up {
+    animation-name: slide-up-compact;
+    animation-duration: 0.28s;
+  }
+  .stagger-1 { animation-delay: 0.02s; }
+  .stagger-2 { animation-delay: 0.04s; }
+  .stagger-3 { animation-delay: 0.06s; }
+  .stagger-4 { animation-delay: 0.08s; }
+  .stagger-5 { animation-delay: 0.10s; }
+  .stagger-6 { animation-delay: 0.12s; }
+}
+
 /* Interactive Card Hover with Smooth Lift */
 .card-hover {
   transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
               box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1),
               border-color 0.2s ease;
 }
-.card-hover:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 28px -6px rgba(28, 25, 23, 0.08), 0 4px 10px -2px rgba(244, 63, 94, 0.06);
+
+/* Mouse and stylus: lift on hover. Touch: respond to the press itself so
+   Android's synthesized, sticky :hover state never leaves controls raised. */
+@media (hover: hover) and (pointer: fine) {
+  .dashboard-action:hover {
+    transform: translateY(-2px);
+  }
+  .dashboard-action:hover .dashboard-action-icon {
+    animation: icon-wiggle 420ms ease-in-out;
+  }
+  .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px -6px rgba(28, 25, 23, 0.08), 0 4px 10px -2px rgba(244, 63, 94, 0.06);
+  }
+  .dark .card-hover:hover {
+    box-shadow: 0 14px 28px -6px rgba(0, 0, 0, 0.5), 0 4px 10px -2px rgba(251, 113, 133, 0.12);
+  }
 }
-.dark .card-hover:hover {
-  box-shadow: 0 14px 28px -6px rgba(0, 0, 0, 0.5), 0 4px 10px -2px rgba(251, 113, 133, 0.12);
+
+@media (hover: none) and (pointer: coarse) {
+  .dashboard-action {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+  .dashboard-action:active .dashboard-action-icon {
+    animation: icon-wiggle 320ms ease-in-out;
+  }
+  .animate-coin-bob {
+    animation-duration: 3.4s;
+    animation-iteration-count: 3;
+  }
+  .animate-sparkle-pop {
+    animation-duration: 3.4s;
+    animation-iteration-count: 3;
+  }
 }
 
 /* Shimmer Loading Effect */

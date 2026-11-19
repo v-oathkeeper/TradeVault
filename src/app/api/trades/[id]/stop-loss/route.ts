@@ -52,7 +52,7 @@ export async function PATCH(
       );
     }
 
-    const currentStop = trade.current_stop_loss ? Number(trade.current_stop_loss) : null;
+    const currentStop = trade.current_stop_loss != null ? Number(trade.current_stop_loss) : null;
     const direction = trade.direction as 'LONG' | 'SHORT';
     const entryPrice = Number(trade.entry_price);
 

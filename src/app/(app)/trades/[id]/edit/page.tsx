@@ -1,6 +1,7 @@
 import React from 'react';
 import { redirect, notFound } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getHouseholdAppContext } from '@/lib/auth/server-auth';
 import { TopBar } from '@/components/layout/TopBar';
 import { TradeForm } from '@/components/trades/TradeForm';
 
@@ -14,47 +15,36 @@ export const metadata = {
 
 export default async function EditTradePage({ params }: EditTradePageProps) {
   const { id } = await params;
+  const appContext = await getHouseholdAppContext();
+  if (!appContext.isAdmin) redirect('/trades');
+
   const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect('/login');
-
-  // Verify Admin role
-  const { data: member } = await supabase
-    .from('household_members')
-    .select('household_id, role')
-    .eq('user_id', user.id)
-    .single();
-
-  if (member?.role === 'VIEWER') {
-    redirect('/trades');
-  }
 
   const { data: trade, error } = await supabase
     .from('trades')
     .select('*')
     .eq('id', id)
+    .eq('household_id', appContext.householdId)
     .single();
 
   if (error || !trade) {
     notFound();
   }
 
-  const { data: brokersData } = await supabase
+  const { data: brokersData, error: brokersError } = await supabase
     .from('brokers')
     .select('id, code, name')
     .eq('is_active', true);
 
-  const brokers =
-    brokersData && brokersData.length > 0
-      ? brokersData.map((b) => ({
+  if (brokersError) {
+    throw new Error(`Failed to load brokers: ${brokersError.message}`);
+  }
+
+  const brokers = (brokersData ?? []).map((b) => ({
           id: b.id,
           code: b.code as 'KITE' | 'SHOONYA',
           name: b.name,
-        }))
-      : [];
+        }));
 
   const initialData = {
     id: trade.id,
@@ -66,7 +56,7 @@ export default async function EditTradePage({ params }: EditTradePageProps) {
     symbol: trade.symbol,
     quantity: trade.quantity,
     entryPrice: Number(trade.entry_price),
-    exitPrice: trade.exit_price ? Number(trade.exit_price) : null,
+    exitPrice: trade.exit_price != null ? Number(trade.exit_price) : null,
     entryAt: trade.entry_at,
     exitAt: trade.exit_at,
     notes: trade.notes,

@@ -14,7 +14,6 @@ export const metadata = {
 
 export default async function TradesPage() {
   const appContext = await getHouseholdAppContext();
-  if (!appContext) return null;
 
   const supabase = await createSupabaseServerClient();
 
@@ -36,8 +35,7 @@ export default async function TradesPage() {
       .order('entry_at', { ascending: false });
 
     if (error) {
-      console.error('[TradesPage] Error fetching trades:', error.message);
-      return [];
+      throw new Error(`Failed to load trades: ${error.message}`);
     }
     return data || [];
   });
@@ -60,12 +58,12 @@ export default async function TradesPage() {
       direction: t.direction,
       quantity: t.quantity,
       entryPrice: Number(t.entry_price),
-      exitPrice: t.exit_price ? Number(t.exit_price) : null,
+      exitPrice: t.exit_price != null ? Number(t.exit_price) : null,
       entryAt: t.entry_at,
       exitAt: t.exit_at,
-      grossPnl: t.gross_pnl ? Number(t.gross_pnl) : null,
+      grossPnl: t.gross_pnl != null ? Number(t.gross_pnl) : null,
       totalCharges: Number(t.total_charges ?? 0),
-      netPnl: t.net_pnl ? Number(t.net_pnl) : null,
+      netPnl: t.net_pnl != null ? Number(t.net_pnl) : null,
       chargesBreakdown: null,
       calculationStatus: t.calculation_status,
       status: t.status,
@@ -74,21 +72,21 @@ export default async function TradesPage() {
       updatedBy: null,
       createdAt: t.entry_at,
       updatedAt: t.entry_at,
-      initialStopLoss: t.initial_stop_loss ? Number(t.initial_stop_loss) : null,
-      currentStopLoss: t.current_stop_loss ? Number(t.current_stop_loss) : null,
-      initialRiskRupees: t.initial_risk_rupees ? Number(t.initial_risk_rupees) : null,
+      initialStopLoss: t.initial_stop_loss != null ? Number(t.initial_stop_loss) : null,
+      currentStopLoss: t.current_stop_loss != null ? Number(t.current_stop_loss) : null,
+      initialRiskRupees: t.initial_risk_rupees != null ? Number(t.initial_risk_rupees) : null,
       realizedRMultiple: null,
       strategyName: t.strategy_name ?? null,
-      milestone1_target: t.milestone1_target ? Number(t.milestone1_target) : null,
+      milestone1_target: t.milestone1_target != null ? Number(t.milestone1_target) : null,
       milestone1_status: t.milestone1_status ?? null,
-      milestone1_trailing_sl: t.milestone1_trailing_sl ? Number(t.milestone1_trailing_sl) : null,
-      milestone2_target: t.milestone2_target ? Number(t.milestone2_target) : null,
+      milestone1_trailing_sl: t.milestone1_trailing_sl != null ? Number(t.milestone1_trailing_sl) : null,
+      milestone2_target: t.milestone2_target != null ? Number(t.milestone2_target) : null,
       milestone2_status: t.milestone2_status ?? null,
-      milestone2_trailing_sl: t.milestone2_trailing_sl ? Number(t.milestone2_trailing_sl) : null,
-      milestone3_target: t.milestone3_target ? Number(t.milestone3_target) : null,
+      milestone2_trailing_sl: t.milestone2_trailing_sl != null ? Number(t.milestone2_trailing_sl) : null,
+      milestone3_target: t.milestone3_target != null ? Number(t.milestone3_target) : null,
       milestone3_status: t.milestone3_status ?? null,
-      milestone3_trailing_sl: t.milestone3_trailing_sl ? Number(t.milestone3_trailing_sl) : null,
-      current_trailing_sl: t.current_trailing_sl ? Number(t.current_trailing_sl) : null,
+      milestone3_trailing_sl: t.milestone3_trailing_sl != null ? Number(t.milestone3_trailing_sl) : null,
+      current_trailing_sl: t.current_trailing_sl != null ? Number(t.current_trailing_sl) : null,
       last_reached_milestone: t.last_reached_milestone ?? null,
       milestones_updated_at: t.milestones_updated_at ?? null,
       portfolioOwner: person

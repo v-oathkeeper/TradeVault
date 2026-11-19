@@ -162,10 +162,10 @@ export async function GET(request: NextRequest) {
           direction: t.direction,
           quantity: t.quantity,
           entryPrice: Number(t.entry_price),
-          exitPrice: t.exit_price ? Number(t.exit_price) : '',
-          grossPnl: t.gross_pnl ? Number(t.gross_pnl) : '',
+          exitPrice: t.exit_price != null ? Number(t.exit_price) : '',
+          grossPnl: t.gross_pnl != null ? Number(t.gross_pnl) : '',
           charges: Number(t.total_charges ?? 0),
-          netPnl: t.net_pnl ? Number(t.net_pnl) : '',
+          netPnl: t.net_pnl != null ? Number(t.net_pnl) : '',
           status: t.status,
         });
       });

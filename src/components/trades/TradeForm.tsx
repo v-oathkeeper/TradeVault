@@ -26,7 +26,7 @@ import { useUser } from '@/components/providers/UserContext';
 import { calculateFeesForTrade } from '@/lib/calculations/fee-engine';
 import { calculateGrossPnl } from '@/lib/calculations/pnl';
 import { toDecimal } from '@/lib/calculations/decimal-utils';
-import { formatINR, cn } from '@/lib/utils';
+import { formatINR, cn, toLocalDateTimeInputValue } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
@@ -55,9 +55,6 @@ export function TradeForm({ brokers, initialData, isEditing = false }: TradeForm
   const defaultBrokerId = brokers[0]?.id ?? '';
   const defaultPersonId = persons[0]?.id ?? '';
 
-  // Current datetime in YYYY-MM-DDTHH:mm format for HTML datetime-local input
-  const nowStr = new Date().toISOString().slice(0, 16);
-
   const {
     register,
     handleSubmit,
@@ -78,14 +75,29 @@ export function TradeForm({ brokers, initialData, isEditing = false }: TradeForm
       initialStopLoss: initialData?.initialStopLoss ?? 0,
       plannedTarget: initialData?.plannedTarget ?? null,
       strategyName: initialData?.strategyName ?? '',
-      entryAt: initialData?.entryAt ? initialData.entryAt.slice(0, 16) : nowStr,
+      entryAt: '',
       exitPrice: initialData?.exitPrice ?? null,
-      exitAt: initialData?.exitAt ? initialData.exitAt.slice(0, 16) : null,
+      exitAt: null,
       notes: initialData?.notes ?? '',
     },
   });
 
   const watched = watch();
+
+  // Set date input values after hydration. This avoids server/client clock
+  // differences and keeps datetime-local values in the browser's local zone.
+  useEffect(() => {
+    setValue(
+      'entryAt',
+      toLocalDateTimeInputValue(initialData?.entryAt),
+      { shouldDirty: false }
+    );
+    setValue(
+      'exitAt',
+      initialData?.exitAt ? toLocalDateTimeInputValue(initialData.exitAt) : null,
+      { shouldDirty: false }
+    );
+  }, [initialData?.entryAt, initialData?.exitAt, setValue]);
 
   // Keep portfolioOwnerId and brokerId synchronized when persons/brokers load
   useEffect(() => {

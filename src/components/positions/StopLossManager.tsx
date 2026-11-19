@@ -3,7 +3,7 @@
 import React, { useState, useCallback } from 'react';
 import { TrendingDown, TrendingUp, ArrowRight, Shield, Clock, AlertTriangle, CheckCircle, Minus } from 'lucide-react';
 import { toast } from 'sonner';
-import { cn, formatINR } from '@/lib/utils';
+import { cn, formatDate, formatINR } from '@/lib/utils';
 import type { Trade, StopLossHistoryEntry, StopLossUpdateType } from '@/types/app';
 
 interface StopLossManagerProps {
@@ -286,12 +286,7 @@ export function StopLossManager({
                           </div>
                         </div>
                         <span className="text-[10px] text-[var(--muted)] font-mono">
-                          {new Date(entry.createdAt).toLocaleString('en-IN', {
-                            day: '2-digit',
-                            month: 'short',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                          {formatDate(entry.createdAt, { includeTime: true })}
                         </span>
                       </div>
                       {entry.marketPriceAtUpdate && (

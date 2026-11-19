@@ -80,42 +80,32 @@ export function SetInitialCapitalModal({
       const targetHusbandId = husbandId || husband?.id;
       const targetWifeId = wifeId || wife?.id;
 
-      const promises: Promise<Response>[] = [];
+      const allocations: { portfolioOwnerId: string; amount: number; notes: string }[] = [];
 
       if (targetHusbandId && husbandAmount !== '') {
-        promises.push(
-          fetch('/api/capital/initial', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              portfolioOwnerId: targetHusbandId,
-              amount: hNum,
-              notes: notes || 'Initial capital allocation for Husband',
-            }),
-          })
-        );
+        allocations.push({
+          portfolioOwnerId: targetHusbandId,
+          amount: hNum,
+          notes: notes || 'Initial capital allocation for Husband',
+        });
       }
 
       if (targetWifeId && wifeAmount !== '') {
-        promises.push(
-          fetch('/api/capital/initial', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              portfolioOwnerId: targetWifeId,
-              amount: wNum,
-              notes: notes || 'Initial capital allocation for Wife',
-            }),
-          })
-        );
+        allocations.push({
+          portfolioOwnerId: targetWifeId,
+          amount: wNum,
+          notes: notes || 'Initial capital allocation for Wife',
+        });
       }
 
-      const results = await Promise.all(promises);
-      for (const res of results) {
-        if (!res.ok) {
-          const errData = await res.json();
-          throw new Error(errData.error || 'Failed to set initial capital');
-        }
+      const res = await fetch('/api/capital/initial', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ allocations }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to set initial capital');
       }
 
       toast.success('Initial invested capital set successfully!');

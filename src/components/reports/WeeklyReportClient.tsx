@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   FileBarChart,
   Download,
@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getWeeklyPresetsIST } from '@/lib/calculations/weekly-calendar';
+import { formatDate } from '@/lib/utils';
 import type { WeeklyTradingReportJSON, ReportTradeItem } from '@/types/weekly-report';
 
 interface PersonOption {
@@ -68,6 +69,8 @@ export function WeeklyReportClient({
   const [copiedAi, setCopiedAi] = useState(false);
   const [expandedTradeId, setExpandedTradeId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'summary' | 'intraday' | 'swing' | 'trades' | 'ai' | 'json'>('summary');
+  const autoGenerateStarted = useRef(false);
+  const reportRequestInFlight = useRef(false);
 
   // Handle Preset change
   const handlePresetChange = (presetId: string) => {
@@ -81,6 +84,8 @@ export function WeeklyReportClient({
 
   // Generate Report function
   const handleGenerateReport = async () => {
+    if (reportRequestInFlight.current) return;
+
     if (!isAdmin) {
       toast.error('Only ADMIN users can generate weekly reports.');
       return;
@@ -91,6 +96,7 @@ export function WeeklyReportClient({
       return;
     }
 
+    reportRequestInFlight.current = true;
     setIsLoading(true);
     try {
       const params = new URLSearchParams({
@@ -113,13 +119,15 @@ export function WeeklyReportClient({
     } catch (err: any) {
       toast.error(err.message || 'Failed to generate report');
     } finally {
+      reportRequestInFlight.current = false;
       setIsLoading(false);
     }
   };
 
   // Automatically fetch default completed week on first mount if admin
   useEffect(() => {
-    if (isAdmin && presets[0]) {
+    if (isAdmin && presets[0] && !autoGenerateStarted.current) {
+      autoGenerateStarted.current = true;
       handleGenerateReport();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -912,7 +920,7 @@ ${JSON.stringify(report, null, 2)}`;
                                 </span>
                               </div>
                               <div className="text-[11px] text-[var(--muted)] mt-0.5">
-                                Entry: {new Date(trade.entry_at).toLocaleDateString('en-IN')} @ ₹{trade.entry_price.toFixed(2)} • Qty: {trade.quantity_entered}
+                                Entry: {formatDate(trade.entry_at)} @ ₹{trade.entry_price.toFixed(2)} • Qty: {trade.quantity_entered}
                                 {trade.exit_price && ` • Exit: ₹${trade.exit_price.toFixed(2)}`}
                               </div>
                             </div>
@@ -1016,7 +1024,7 @@ ${JSON.stringify(report, null, 2)}`;
                                         {sl.notes && <span className="text-[10px] text-[var(--muted)] block">{sl.notes}</span>}
                                       </div>
                                       <div className="text-right text-[10px] text-[var(--muted)]">
-                                        <div>{new Date(sl.created_at).toLocaleDateString('en-IN')}</div>
+                                        <div>{formatDate(sl.created_at)}</div>
                                       </div>
                                     </div>
                                   ))}
@@ -1040,7 +1048,7 @@ ${JSON.stringify(report, null, 2)}`;
                                         <span className="font-semibold">{ex.execution_type}</span>: {ex.quantity} shares @ ₹{ex.price.toFixed(2)}
                                       </div>
                                       <div className="text-[10px] text-[var(--muted)]">
-                                        {new Date(ex.executed_at).toLocaleString('en-IN')}
+                                        {formatDate(ex.executed_at, { includeTime: true })}
                                       </div>
                                     </div>
                                   ))}

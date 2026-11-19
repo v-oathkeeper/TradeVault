@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ClosePositionSchema, type ClosePositionInput } from '@/lib/validation/schemas';
-import { formatINR, cn } from '@/lib/utils';
+import { formatINR, cn, toLocalDateTimeInputValue } from '@/lib/utils';
 import { calculateGrossPnl } from '@/lib/calculations/pnl';
 import { calculateFeesForTrade } from '@/lib/calculations/fee-engine';
 import { toDecimal } from '@/lib/calculations/decimal-utils';
@@ -31,12 +31,17 @@ export function ClosePositionModal({
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const nowStr = new Date().toISOString().slice(0, 16);
+  const [nowStr, setNowStr] = useState('');
+
+  useEffect(() => {
+    if (open) setNowStr(toLocalDateTimeInputValue());
+  }, [open, trade?.id]);
 
   const {
     register,
     handleSubmit,
     watch,
+    reset,
     formState: { errors },
   } = useForm<ClosePositionInput>({
     resolver: zodResolver(ClosePositionSchema) as any,
@@ -45,14 +50,16 @@ export function ClosePositionModal({
       exitPrice: trade?.entryPrice ?? 0,
       exitAt: nowStr,
     },
-    values: trade
-      ? {
-          tradeId: trade.id,
-          exitPrice: trade.entryPrice,
-          exitAt: nowStr,
-        }
-      : undefined,
   });
+
+  useEffect(() => {
+    if (!trade) return;
+    reset({
+      tradeId: trade.id,
+      exitPrice: trade.entryPrice,
+      exitAt: nowStr,
+    });
+  }, [trade?.id, trade?.entryPrice, nowStr, reset]);
 
   const watchedExitPrice = watch('exitPrice');
 

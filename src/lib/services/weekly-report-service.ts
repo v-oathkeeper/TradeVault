@@ -40,23 +40,45 @@ export async function generateWeeklyTradingReport({
   endDate,
   filters,
   supabase,
+  persons: suppliedPersons,
+  brokers: suppliedBrokers,
 }: {
   householdId: string;
   startDate: string; // YYYY-MM-DD
   endDate: string;   // YYYY-MM-DD
   filters: WeeklyReportFilters;
   supabase: SupabaseClient<Database>;
+  persons?: { id: string; display_name: string; relationship_label: string }[];
+  brokers?: { id: string; code: string; name: string }[];
 }): Promise<WeeklyTradingReportJSON> {
   const windowStartISO = getISTStartOfDayISO(startDate);
   const windowEndISO = getISTEndOfDayISO(endDate);
   const windowStartMs = new Date(windowStartISO).getTime();
   const windowEndMs = new Date(windowEndISO).getTime();
 
-  // 1. Fetch household persons to resolve owner labels
-  const { data: personsData } = await supabase
-    .from('persons')
-    .select('id, display_name, relationship_label')
-    .eq('household_id', householdId);
+  // Reuse route-level lookups when provided so report generation avoids
+  // repeating household and broker reads.
+  const [personsResult, brokersResult] = await Promise.all([
+    suppliedPersons
+      ? Promise.resolve({ data: suppliedPersons, error: null })
+      : supabase
+          .from('persons')
+          .select('id, display_name, relationship_label')
+          .eq('household_id', householdId),
+    suppliedBrokers
+      ? Promise.resolve({ data: suppliedBrokers, error: null })
+      : supabase.from('brokers').select('id, code, name'),
+  ]);
+
+  if (personsResult.error) {
+    throw new Error(`Failed to query household members: ${personsResult.error.message}`);
+  }
+  if (brokersResult.error) {
+    throw new Error(`Failed to query brokers: ${brokersResult.error.message}`);
+  }
+
+  const personsData = personsResult.data ?? [];
+  const brokersData = brokersResult.data ?? [];
 
   const personsMap = new Map<string, { displayName: string; relationshipLabel: string }>();
   (personsData || []).forEach((p) => {
@@ -65,11 +87,6 @@ export async function generateWeeklyTradingReport({
       relationshipLabel: p.relationship_label,
     });
   });
-
-  // 2. Fetch brokers
-  const { data: brokersData } = await supabase
-    .from('brokers')
-    .select('id, code, name');
 
   const brokersMap = new Map<string, { code: 'KITE' | 'SHOONYA'; name: string }>();
   (brokersData || []).forEach((b) => {

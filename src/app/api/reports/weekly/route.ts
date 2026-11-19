@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getCompletedTradingWeekIST } from '@/lib/calculations/weekly-calendar';
 import { generateWeeklyTradingReport } from '@/lib/services/weekly-report-service';
 import type { WeeklyReportFilters } from '@/types/weekly-report';
+import { KNOWN_BROKERS } from '@/lib/brokers';
 
 export async function GET(request: NextRequest) {
   try {
@@ -34,20 +35,22 @@ export async function GET(request: NextRequest) {
 
     const supabase = await createSupabaseServerClient();
 
-    // Fetch household persons
-    const { data: persons, error: personsError } = await supabase
+    // Resolve household-specific labels once. Broker IDs and display metadata
+    // are seeded constants, so reuse the local registry instead of making a
+    // second network request for static lookup data.
+    const personsResult = await supabase
       .from('persons')
       .select('id, display_name, relationship_label, is_active')
       .eq('household_id', ctx.householdId);
 
-    if (personsError) {
+    if (personsResult.error) {
       return NextResponse.json(
-        { error: 'Failed to fetch household portfolio members' },
+        { error: 'Failed to load report lookup data' },
         { status: 500 }
       );
     }
 
-    const activePersons = persons || [];
+    const activePersons = personsResult.data || [];
 
     // Resolve portfolio owner filter
     let targetOwnerId = 'all';
@@ -96,6 +99,8 @@ export async function GET(request: NextRequest) {
       endDate,
       filters,
       supabase,
+      persons: activePersons,
+      brokers: Object.values(KNOWN_BROKERS),
     });
 
     if (format === 'json') {

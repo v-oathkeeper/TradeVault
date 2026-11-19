@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useTheme } from 'next-themes';
-import { Sun, Moon, Users, Filter } from 'lucide-react';
+import { Sun, Moon } from 'lucide-react';
 import { useUser } from '@/components/providers/UserContext';
 import { cn } from '@/lib/utils';
 
@@ -81,23 +81,29 @@ export function TopBar({ title }: TopBarProps) {
 
       <div className="flex items-center gap-2 sm:gap-3">
         {/* Date range filter on larger screens */}
-        <div className="hidden md:flex items-center p-1 rounded-xl bg-[var(--background)] border border-[var(--border)] text-xs font-medium">
-          {dateRangeOptions.map((opt) => (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => setDateRange(opt.id)}
-              className={cn(
-                'px-2.5 py-1 rounded-lg transition-all',
-                dateRange === opt.id
-                  ? 'bg-[var(--card)] text-[var(--foreground)] font-semibold shadow-sm'
-                  : 'text-[var(--muted)] hover:text-[var(--foreground)]'
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+        {title === 'Dashboard' && (
+          <div
+            className="hidden md:flex items-center p-1 rounded-xl bg-[var(--background)] border border-[var(--border)] text-xs font-medium"
+            aria-label="Dashboard date range"
+          >
+            {dateRangeOptions.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setDateRange(opt.id)}
+                aria-pressed={dateRange === opt.id}
+                className={cn(
+                  'px-2.5 py-1 rounded-lg transition-all',
+                  dateRange === opt.id
+                    ? 'bg-[var(--card)] text-[var(--foreground)] font-semibold shadow-sm'
+                    : 'text-[var(--muted)] hover:text-[var(--foreground)]'
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Theme toggle */}
         <button

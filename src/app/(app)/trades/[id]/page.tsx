@@ -1,6 +1,7 @@
 import React from 'react';
 import { notFound } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getHouseholdAppContext } from '@/lib/auth/server-auth';
 import { TopBar } from '@/components/layout/TopBar';
 import { TradeDetailClient } from '@/components/trades/TradeDetailClient';
 import { getTradeMilestoneHistory } from '@/lib/services/gemini-milestone-service';
@@ -17,20 +18,9 @@ export const metadata = {
 
 export default async function TradeDetailPage({ params }: TradeDetailPageProps) {
   const { id } = await params;
+  const appContext = await getHouseholdAppContext();
   const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return null;
-
-  const { data: member } = await supabase
-    .from('household_members')
-    .select('household_id, role')
-    .eq('user_id', user.id)
-    .single();
-
-  const isAdmin = member?.role === 'ADMIN';
+  const isAdmin = appContext.isAdmin;
 
   const [tradeRes, milestoneHistory] = await Promise.all([
     supabase
@@ -42,6 +32,7 @@ export default async function TradeDetailPage({ params }: TradeDetailPageProps) 
         stop_loss_history(*)
       `)
       .eq('id', id)
+      .eq('household_id', appContext.householdId)
       .single(),
     getTradeMilestoneHistory(id),
   ]);
@@ -59,7 +50,7 @@ export default async function TradeDetailPage({ params }: TradeDetailPageProps) 
       : Number(trade.entry_price) * trade.quantity;
 
   const returnPct =
-    trade.gross_pnl && trade.entry_price && trade.quantity
+    trade.gross_pnl != null && trade.entry_price && trade.quantity
       ? (Number(trade.gross_pnl) / (Number(trade.entry_price) * trade.quantity)) * 100
       : null;
 
@@ -70,10 +61,10 @@ export default async function TradeDetailPage({ params }: TradeDetailPageProps) 
     .map((h) => ({
       id: h.id,
       tradeId: h.trade_id,
-      previousStop: h.previous_stop ? Number(h.previous_stop) : null,
+      previousStop: h.previous_stop != null ? Number(h.previous_stop) : null,
       newStop: Number(h.new_stop),
       stopType: h.stop_type,
-      marketPriceAtUpdate: h.market_price_at_update ? Number(h.market_price_at_update) : null,
+      marketPriceAtUpdate: h.market_price_at_update != null ? Number(h.market_price_at_update) : null,
       floatingRAtUpdate: null,
       notes: h.notes,
       createdBy: h.created_by,
@@ -93,12 +84,12 @@ export default async function TradeDetailPage({ params }: TradeDetailPageProps) 
     direction: trade.direction,
     quantity: trade.quantity,
     entryPrice: Number(trade.entry_price),
-    exitPrice: trade.exit_price ? Number(trade.exit_price) : null,
+    exitPrice: trade.exit_price != null ? Number(trade.exit_price) : null,
     entryAt: trade.entry_at,
     exitAt: trade.exit_at,
-    grossPnl: trade.gross_pnl ? Number(trade.gross_pnl) : null,
+    grossPnl: trade.gross_pnl != null ? Number(trade.gross_pnl) : null,
     totalCharges: Number(trade.total_charges ?? 0),
-    netPnl: trade.net_pnl ? Number(trade.net_pnl) : null,
+    netPnl: trade.net_pnl != null ? Number(trade.net_pnl) : null,
     chargesBreakdown: null,
     calculationStatus: trade.calculation_status,
     status: trade.status,
@@ -108,21 +99,21 @@ export default async function TradeDetailPage({ params }: TradeDetailPageProps) 
     createdAt: trade.created_at,
     updatedAt: trade.updated_at,
     // Gemini Milestones
-    milestone1Target: tradeData.milestone1_target ? Number(tradeData.milestone1_target) : null,
+    milestone1Target: tradeData.milestone1_target != null ? Number(tradeData.milestone1_target) : null,
     milestone1Status: tradeData.milestone1_status,
-    milestone1TrailingSl: tradeData.milestone1_trailing_sl ? Number(tradeData.milestone1_trailing_sl) : null,
-    milestone2Target: tradeData.milestone2_target ? Number(tradeData.milestone2_target) : null,
+    milestone1TrailingSl: tradeData.milestone1_trailing_sl != null ? Number(tradeData.milestone1_trailing_sl) : null,
+    milestone2Target: tradeData.milestone2_target != null ? Number(tradeData.milestone2_target) : null,
     milestone2Status: tradeData.milestone2_status,
-    milestone2TrailingSl: tradeData.milestone2_trailing_sl ? Number(tradeData.milestone2_trailing_sl) : null,
-    milestone3Target: tradeData.milestone3_target ? Number(tradeData.milestone3_target) : null,
+    milestone2TrailingSl: tradeData.milestone2_trailing_sl != null ? Number(tradeData.milestone2_trailing_sl) : null,
+    milestone3Target: tradeData.milestone3_target != null ? Number(tradeData.milestone3_target) : null,
     milestone3Status: tradeData.milestone3_status,
-    milestone3TrailingSl: tradeData.milestone3_trailing_sl ? Number(tradeData.milestone3_trailing_sl) : null,
-    currentTrailingSl: tradeData.current_trailing_sl ? Number(tradeData.current_trailing_sl) : null,
+    milestone3TrailingSl: tradeData.milestone3_trailing_sl != null ? Number(tradeData.milestone3_trailing_sl) : null,
+    currentTrailingSl: tradeData.current_trailing_sl != null ? Number(tradeData.current_trailing_sl) : null,
     lastReachedMilestone: tradeData.last_reached_milestone,
     milestonesUpdatedAt: tradeData.milestones_updated_at,
     // Legacy Stop Loss
-    initialStopLoss: tradeData.initial_stop_loss ? Number(tradeData.initial_stop_loss) : null,
-    currentStopLoss: tradeData.current_stop_loss ? Number(tradeData.current_stop_loss) : null,
+    initialStopLoss: tradeData.initial_stop_loss != null ? Number(tradeData.initial_stop_loss) : null,
+    currentStopLoss: tradeData.current_stop_loss != null ? Number(tradeData.current_stop_loss) : null,
     strategyName: tradeData.strategy_name,
     broker: trade.broker as any,
     portfolioOwner: trade.portfolio_owner as any,

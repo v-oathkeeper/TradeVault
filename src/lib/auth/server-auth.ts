@@ -11,6 +11,12 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { measureAsync } from '@/lib/perf';
 import type { UserRole } from '@/types/app';
 
+interface AuthenticatedUser {
+  id: string;
+  email?: string;
+  user_metadata?: Record<string, unknown>;
+}
+
 export class AuthError extends Error {
   constructor(
     message: string,
@@ -22,51 +28,47 @@ export class AuthError extends Error {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Short-lived in-memory server cache for household context
-// Eliminates repetitive sequential WAN queries on every page transition.
+// React cache() deduplicates authentication reads within a server request.
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface CachedAppContext {
-  householdId: string;
-  role: UserRole;
-  isAdmin: boolean;
-  fullName: string;
-  persons: {
-    id: string;
-    displayName: string;
-    relationshipLabel: string;
-  }[];
-  cachedAt: number;
-}
-
-const appContextCache = new Map<string, CachedAppContext>();
-const CONTEXT_CACHE_TTL_MS = 60_000; // 60 seconds
-
 /**
- * Invalidate cached household context (call on user/person mutations).
- */
-export function invalidateHouseholdCache(userId?: string) {
-  if (userId) {
-    appContextCache.delete(userId);
-  } else {
-    appContextCache.clear();
-  }
-}
-
-/**
- * Get the current authenticated user.
+ * Verify the current access token and return the identity fields used by the app.
  * Memoized per server request lifecycle with React cache().
  */
 export const requireAuth = cache(async () => {
   return measureAsync('requireAuth', async () => {
     const supabase = await createSupabaseServerClient();
-    const { data: { user }, error } = await supabase.auth.getUser();
+    let result: Awaited<ReturnType<typeof supabase.auth.getClaims>>;
+    try {
+      result = await supabase.auth.getClaims();
+    } catch {
+      throw new AuthError('Authentication service is unavailable', 503);
+    }
+    const { data, error } = result;
 
-    if (error || !user) {
+    if (error) {
+      const isAuthFailure = error.status === 400 || error.status === 401 || error.status === 403;
+      throw new AuthError(
+        isAuthFailure ? 'Authentication required' : 'Authentication service is unavailable',
+        isAuthFailure ? 401 : 503
+      );
+    }
+
+    const claims = data?.claims;
+    if (!claims || typeof claims.sub !== 'string' || !claims.sub) {
       throw new AuthError('Authentication required', 401);
     }
 
-    return user;
+    const userMetadata =
+      claims.user_metadata && typeof claims.user_metadata === 'object'
+        ? (claims.user_metadata as Record<string, unknown>)
+        : undefined;
+
+    return {
+      id: claims.sub,
+      email: typeof claims.email === 'string' ? claims.email : undefined,
+      user_metadata: userMetadata,
+    } satisfies AuthenticatedUser;
   });
 });
 
@@ -76,19 +78,6 @@ export const requireAuth = cache(async () => {
  */
 export const requireHouseholdMember = cache(async () => {
   const user = await requireAuth();
-
-  // Check cache first
-  const cached = appContextCache.get(user.id);
-  if (cached && Date.now() - cached.cachedAt < CONTEXT_CACHE_TTL_MS) {
-    return {
-      user,
-      householdId: cached.householdId,
-      role: cached.role,
-      isAdmin: cached.isAdmin,
-      isViewer: cached.role === 'VIEWER',
-    };
-  }
-
   const supabase = await createSupabaseServerClient();
 
   const { data: membership, error } = await supabase
@@ -96,9 +85,13 @@ export const requireHouseholdMember = cache(async () => {
     .select('household_id, role, is_active')
     .eq('user_id', user.id)
     .eq('is_active', true)
-    .single();
+    .maybeSingle();
 
-  if (error || !membership) {
+  if (error) {
+    throw new AuthError('Unable to verify household membership', 503);
+  }
+
+  if (!membership) {
     throw new AuthError('Not a member of any household', 403);
   }
 
@@ -113,74 +106,56 @@ export const requireHouseholdMember = cache(async () => {
 
 /**
  * Retrieves the full household application context (user, membership, profile, and persons)
- * with request-scoped deduplication via React cache() and 60-second in-memory server cache.
+ * with request-scoped deduplication via React cache().
  */
 export const getHouseholdAppContext = cache(async () => {
   return measureAsync('getHouseholdAppContext', async () => {
+    const user = await requireAuth();
     const supabase = await createSupabaseServerClient();
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-    if (userError || !user) {
-      return null;
+    // Resolve authorization from the database so role changes take effect at
+    // once. Avoid a separate profile round trip on every page; auth metadata
+    // and email provide a display-name fallback without blocking the workspace.
+    const { data: member, error: memberError } = await supabase
+      .from('household_members')
+      .select('household_id, role')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (memberError) {
+      throw new AuthError('Unable to verify household membership', 503);
+    }
+    if (!member) {
+      throw new AuthError('Not a member of any household', 403);
     }
 
-    // Fast-path: return from in-memory cache if fresh
-    const cached = appContextCache.get(user.id);
-    if (cached && Date.now() - cached.cachedAt < CONTEXT_CACHE_TTL_MS) {
-      return {
-        user,
-        householdId: cached.householdId,
-        role: cached.role,
-        isAdmin: cached.isAdmin,
-        fullName: cached.fullName,
-        persons: cached.persons,
-      };
-    }
-
-    // Concurrent fetch for membership and profile
-    const [memberRes, profileRes] = await Promise.all([
-      supabase
-        .from('household_members')
-        .select('household_id, role')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .maybeSingle(),
-      supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', user.id)
-        .maybeSingle(),
-    ]);
-
-    const householdId = memberRes.data?.household_id ?? 'b1000000-0000-0000-0000-000000000001';
-    const role: UserRole = (memberRes.data?.role as UserRole) ?? 'ADMIN';
-    const fullName = profileRes.data?.full_name ?? (role === 'ADMIN' ? 'Husband' : 'Wife');
+    const householdId = member.household_id;
+    const role = member.role as UserRole;
+    const metadataName =
+      typeof user.user_metadata?.full_name === 'string'
+        ? user.user_metadata.full_name
+        : typeof user.user_metadata?.name === 'string'
+          ? user.user_metadata.name
+          : '';
+    const fullName = metadataName.trim() || user.email?.split('@')[0] || 'Account';
 
     // Fetch active persons for this household
-    const { data: personsData } = await supabase
+    const { data: personsData, error: personsError } = await supabase
       .from('persons')
       .select('id, display_name, relationship_label')
       .eq('household_id', householdId)
       .eq('is_active', true);
 
-    const persons = (personsData && personsData.length > 0)
-      ? personsData.map((p) => ({
-          id: p.id,
-          displayName: p.display_name,
-          relationshipLabel: p.relationship_label,
-        }))
-      : [
-          {
-            id: 'c1000000-0000-0000-0000-000000000001',
-            displayName: 'Husband',
-            relationshipLabel: 'Husband',
-          },
-          {
-            id: 'c2000000-0000-0000-0000-000000000002',
-            displayName: 'Wife',
-            relationshipLabel: 'Wife',
-          },
-        ];
+    if (personsError) {
+      throw new AuthError('Unable to load household members', 503);
+    }
+
+    const persons = (personsData ?? []).map((p) => ({
+      id: p.id,
+      displayName: p.display_name,
+      relationshipLabel: p.relationship_label,
+    }));
 
     const result = {
       user,
@@ -190,16 +165,6 @@ export const getHouseholdAppContext = cache(async () => {
       fullName,
       persons,
     };
-
-    // Populate server cache
-    appContextCache.set(user.id, {
-      householdId,
-      role,
-      isAdmin: role === 'ADMIN',
-      fullName,
-      persons,
-      cachedAt: Date.now(),
-    });
 
     return result;
   });
