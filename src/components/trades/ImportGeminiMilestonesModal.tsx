@@ -17,6 +17,8 @@ import { formatINR } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import type { MilestonePreviewResult } from '@/lib/services/gemini-milestone-service';
+import { LottieAnimation } from '@/components/ui/LottieAnimation';
+import { successCheckAnimation } from '@/lib/animations/lottie-data';
 
 interface ImportGeminiMilestonesModalProps {
   open: boolean;
@@ -28,30 +30,35 @@ interface ImportGeminiMilestonesModalProps {
 }
 
 const EXAMPLE_GEMINI_JSON = `{
-  "symbol": "UNIONBANK",
-  "milestones": [
-    {
-      "milestone": 1,
-      "target_price": 200.50,
-      "status": "REACHED",
-      "trailing_stop_loss": 185.00
-    },
-    {
-      "milestone": 2,
-      "target_price": 215.00,
+  "schema_version": "1.0",
+  "source": "gemini_trading_skill",
+  "updated_at": "2026-11-19T15:10:00+05:30",
+  "symbol": "PPLPHARMA",
+  "exchange": "NSE",
+  "trading_type": "CNC",
+  "direction": "LONG",
+  "entry_price": 239.94,
+  "initial_stop_loss": 230.50,
+  "milestones": {
+    "milestone_1": {
+      "target_price": 254.10,
       "status": "PENDING",
-      "trailing_stop_loss": 195.00
+      "trailing_stop_loss": null
     },
-    {
-      "milestone": 3,
-      "target_price": 230.00,
+    "milestone_2": {
+      "target_price": 258.85,
       "status": "PENDING",
-      "trailing_stop_loss": 210.00
+      "trailing_stop_loss": null
+    },
+    "milestone_3": {
+      "target_price": 266.40,
+      "status": "PENDING",
+      "trailing_stop_loss": null
     }
-  ],
-  "current_trailing_stop_loss": 195.00,
-  "last_reached_milestone": "Milestone 1",
-  "notes": "Milestone 1 hit, stop-loss trailed to 195.00"
+  },
+  "last_reached_milestone": null,
+  "current_trailing_stop_loss": null,
+  "notes": "Filled 30 shares at 239.94. M1=254.10, M2=258.85, M3=266.40."
 }`;
 
 export function ImportGeminiMilestonesModal({
@@ -245,7 +252,7 @@ export function ImportGeminiMilestonesModal({
 
           <textarea
             rows={7}
-            placeholder={`Paste structured Gemini JSON here...\n{\n  "symbol": "UNIONBANK",\n  "milestones": [ ... ]\n}`}
+            placeholder={`Paste Gemini JSON here...\n{\n  "symbol": "PPLPHARMA",\n  "milestones": {\n    "milestone_1": { "target_price": 254.10, "status": "PENDING", "trailing_stop_loss": null },\n    "milestone_2": { "target_price": 258.85, "status": "PENDING", "trailing_stop_loss": null },\n    "milestone_3": { "target_price": 266.40, "status": "PENDING", "trailing_stop_loss": null }\n  },\n  "current_trailing_stop_loss": null\n}`}
             value={jsonText}
             onChange={(e) => {
               setJsonText(e.target.value);
@@ -288,11 +295,14 @@ export function ImportGeminiMilestonesModal({
 
         {/* ── Structured Preview ────────────────────────────────────── */}
         {preview && m && (
-          <div className="rounded-2xl border border-rose-500/20 bg-gradient-to-br from-rose-500/5 via-champagne-500/5 to-lavender-500/5 p-4 space-y-4 animate-in fade-in duration-200">
+          <div className="rounded-2xl border border-rose-500/20 bg-gradient-to-br from-rose-500/5 via-champagne-500/5 to-lavender-500/5 p-4 space-y-4 animate-scale-in">
             <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                <span className="text-xs font-bold text-[var(--foreground)]">Validated Preview</span>
+              <div className="flex items-center gap-2.5">
+                <LottieAnimation animationData={successCheckAnimation} loop={false} className="w-8 h-8 shrink-0" />
+                <div>
+                  <span className="text-xs font-bold text-[var(--foreground)] block">Validated Preview</span>
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Ready for import</span>
+                </div>
               </div>
               {preview.matchedTrade ? (
                 <div className="text-xs">
@@ -310,13 +320,13 @@ export function ImportGeminiMilestonesModal({
             {/* Milestones 1, 2, 3 Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {[
-                { title: 'Milestone 1', item: m.milestone1 },
-                { title: 'Milestone 2', item: m.milestone2 },
-                { title: 'Milestone 3', item: m.milestone3 },
-              ].map(({ title, item }, idx) => (
+                { title: 'Milestone 1', item: m.milestone1, delay: 'stagger-1' },
+                { title: 'Milestone 2', item: m.milestone2, delay: 'stagger-2' },
+                { title: 'Milestone 3', item: m.milestone3, delay: 'stagger-3' },
+              ].map(({ title, item, delay }, idx) => (
                 <div
                   key={idx}
-                  className="p-3 rounded-2xl bg-[var(--card)] border border-[var(--border)] space-y-1.5"
+                  className={`p-3.5 rounded-2xl bg-[var(--card)] border border-[var(--border)] space-y-1.5 card-hover animate-slide-up ${delay}`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">

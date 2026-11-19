@@ -28,8 +28,9 @@ export function useCapitalData(initialSummary?: HouseholdCapitalSummary) {
       persons.find(
         (p) =>
           p.relationshipLabel.toLowerCase().includes('husband') ||
-          p.displayName.toLowerCase().includes('husband')
-      ),
+          p.displayName.toLowerCase().includes('husband') ||
+          p.relationshipLabel.toLowerCase().includes('self')
+      ) || persons[0],
     [persons]
   );
 
@@ -38,8 +39,9 @@ export function useCapitalData(initialSummary?: HouseholdCapitalSummary) {
       persons.find(
         (p) =>
           p.relationshipLabel.toLowerCase().includes('wife') ||
-          p.displayName.toLowerCase().includes('wife')
-      ),
+          p.displayName.toLowerCase().includes('wife') ||
+          p.relationshipLabel.toLowerCase().includes('spouse')
+      ) || persons[1],
     [persons]
   );
 

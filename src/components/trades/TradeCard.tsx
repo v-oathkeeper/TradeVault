@@ -20,7 +20,7 @@ export function TradeCard({ trade, onDelete }: TradeCardProps) {
   const brokerCode = trade.broker?.code ?? 'KITE';
 
   return (
-    <div className="p-4 rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-sm space-y-3">
+    <div className="p-4 rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-sm space-y-3 card-hover animate-slide-up transition-all">
       {/* Header: Symbol, Badges, Net P&L */}
       <div className="flex items-start justify-between gap-2">
         <div className="space-y-1">

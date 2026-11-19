@@ -20,6 +20,8 @@ import {
 import { Badge } from '@/components/ui/Badge';
 import { formatINR, cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { LottieAnimation } from '@/components/ui/LottieAnimation';
+import { successCheckAnimation } from '@/lib/animations/lottie-data';
 import type {
   ImportValidationResult,
   ValidatedTradeItem,
@@ -33,22 +35,31 @@ interface ImportTradeModalProps {
 
 const EXAMPLE_JSON = `{
   "schema_version": "1.0",
-  "trades": [
-    {
-      "portfolio_owner": "me",
-      "broker": "ZERODHA",
-      "exchange": "NSE",
-      "symbol": "UNIONBANK",
-      "trade_type": "SWING",
-      "direction": "LONG",
-      "entry_price": 182.45,
-      "initial_stop_loss": 175.50,
-      "quantity": 10,
-      "target_price": 203.30,
-      "strategy": "Breakout",
-      "notes": "Breakout above resistance with volume confirmation"
+  "source": "gemini_trading_skill",
+  "symbol": "PPLPHARMA",
+  "exchange": "NSE",
+  "trading_type": "CNC",
+  "direction": "LONG",
+  "entry_price": 239.94,
+  "initial_stop_loss": 230.50,
+  "milestones": {
+    "milestone_1": {
+      "target_price": 254.10,
+      "status": "PENDING",
+      "trailing_stop_loss": null
+    },
+    "milestone_2": {
+      "target_price": 258.85,
+      "status": "PENDING",
+      "trailing_stop_loss": null
+    },
+    "milestone_3": {
+      "target_price": 266.40,
+      "status": "PENDING",
+      "trailing_stop_loss": null
     }
-  ]
+  },
+  "notes": "Filled 30 shares at 239.94. M1=254.10, M2=258.85, M3=266.40."
 }`;
 
 export function ImportTradeModal({ open, onClose, onSuccess }: ImportTradeModalProps) {
@@ -224,10 +235,12 @@ export function ImportTradeModal({ open, onClose, onSuccess }: ImportTradeModalP
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
           {/* Post-Import Success Screen */}
           {importSummary ? (
-            <div className="py-8 text-center space-y-4">
-              <div className="w-16 h-16 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center justify-center mx-auto">
-                <CheckCircle2 className="w-9 h-9" />
-              </div>
+            <div className="py-8 text-center space-y-4 animate-scale-in">
+              <LottieAnimation
+                animationData={successCheckAnimation}
+                loop={false}
+                className="w-20 h-20 mx-auto"
+              />
               <div className="space-y-1">
                 <h4 className="text-xl font-bold text-[var(--foreground)]">
                   Import Completed Successfully

@@ -120,6 +120,21 @@ export interface ValidatedTradeItem {
   // Duplicate checks
   isDuplicate?: boolean;
   duplicateWarning?: string | null;
+
+  // Optional Gemini milestones imported along with trade
+  milestone1_target?: number | null;
+  milestone1_status?: string | null;
+  milestone1_trailing_sl?: number | null;
+  milestone2_target?: number | null;
+  milestone2_status?: string | null;
+  milestone2_trailing_sl?: number | null;
+  milestone3_target?: number | null;
+  milestone3_status?: string | null;
+  milestone3_trailing_sl?: number | null;
+  current_trailing_sl?: number | null;
+  last_reached_milestone?: string | null;
+  milestones_updated_at?: string | null;
+  raw_gemini_input?: unknown;
 }
 
 /**

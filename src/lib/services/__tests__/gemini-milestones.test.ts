@@ -132,4 +132,58 @@ describe('Gemini Milestone JSON Parser & Normalizer', () => {
     expect(data.milestone2.status).toBe('MISSED');
     expect(data.milestone3.status).toBe('CANCELLED');
   });
+
+  it('parses actual Gemini skill export with nested milestone_1/2/3 keys', () => {
+    const geminiExport = {
+      schema_version: '1.0',
+      source: 'gemini_trading_skill',
+      updated_at: '2026-11-19T15:10:00+05:30',
+      symbol: 'PPLPHARMA',
+      exchange: 'NSE',
+      trading_type: 'CNC',
+      direction: 'LONG',
+      entry_price: 239.94,
+      initial_stop_loss: 230.5,
+      milestones: {
+        milestone_1: {
+          target_price: 254.1,
+          status: 'PENDING',
+          trailing_stop_loss: null,
+        },
+        milestone_2: {
+          target_price: 258.85,
+          status: 'PENDING',
+          trailing_stop_loss: null,
+        },
+        milestone_3: {
+          target_price: 266.4,
+          status: 'PENDING',
+          trailing_stop_loss: null,
+        },
+      },
+      last_reached_milestone: null,
+      current_trailing_stop_loss: null,
+      notes:
+        'Filled 30 shares at 239.94 (15:08:41 IST). Milestone levels revised from 239.75 pre-fill estimate to actual 239.94 fill (1R = 9.44). On M1 (254.10), trail stop to SL2 Estimated Net Breakeven (241.00); on M2 (258.85), trail stop to SL3 (254.10); M3 target at 266.40.',
+    };
+
+    const result = parseAndValidateGeminiJson(geminiExport);
+    expect(result.success).toBe(true);
+    const data = result.data!;
+
+    expect(data.symbol).toBe('PPLPHARMA');
+    expect(data.milestone1.targetPrice).toBe(254.1);
+    expect(data.milestone1.status).toBe('PENDING');
+    expect(data.milestone1.trailingStopLoss).toBeNull();
+
+    expect(data.milestone2.targetPrice).toBe(258.85);
+    expect(data.milestone2.status).toBe('PENDING');
+
+    expect(data.milestone3.targetPrice).toBe(266.4);
+    expect(data.milestone3.status).toBe('PENDING');
+
+    expect(data.currentTrailingStopLoss).toBeNull();
+    expect(data.lastReachedMilestone).toBeNull();
+    expect(data.timestamp).toBe('2026-11-19T15:10:00+05:30');
+  });
 });

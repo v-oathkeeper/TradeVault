@@ -26,15 +26,15 @@ function MilestoneBadge({ label, price, status }: { label: string; price: number
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[10px] font-bold font-mono',
+        'inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border text-[10px] font-bold font-mono transition-all',
         isReached
-          ? 'text-emerald-500 border-emerald-500/30 bg-emerald-500/10'
-          : 'text-purple-400 border-purple-500/30 bg-purple-500/10'
+          ? 'text-emerald-500 border-emerald-500/30 bg-emerald-500/10 shadow-sm shadow-emerald-500/10 animate-scale-in'
+          : 'text-purple-400 border-purple-500/30 bg-purple-500/10 hover:border-purple-400/50'
       )}
     >
       <span className="font-normal opacity-70">{label}</span>
       ₹{price.toFixed(2)}
-      {isReached && <span className="text-[9px]">✓</span>}
+      {isReached && <span className="text-[10px] text-emerald-500">✓</span>}
     </span>
   );
 }
@@ -148,7 +148,7 @@ export function PositionsClient({ initialTrades }: PositionsClientProps) {
               return (
                 <div
                   key={pos.id}
-                  className="p-4 sm:p-5 rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-sm space-y-4 hover:border-[var(--foreground)]/20 transition-colors"
+                  className="p-4 sm:p-5 rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-sm space-y-4 hover:border-rose-300 dark:hover:border-rose-900/40 card-hover animate-slide-up transition-all"
                 >
                   {/* Header Row */}
                   <div className="flex items-start justify-between">

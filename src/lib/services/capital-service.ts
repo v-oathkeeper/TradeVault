@@ -133,7 +133,7 @@ export function calculateCapitalSummary(
     });
 
     for (const tx of txRows) {
-      if (reversedIds.has(tx.id)) continue; // skip reversed source record
+      if (reversedIds.has(tx.id) || tx.reversal_of) continue; // skip reversed source records and reversal audit records
 
       const bucket = tx.strategy_bucket || 'INTRADAY';
       const key = `${tx.portfolio_owner_id}_${bucket}`;
@@ -578,7 +578,8 @@ export async function recordWithdrawal(
 
 /**
  * Sets initial invested capital for a specific portfolio owner (Husband or Wife).
- * If initial allocation already exists, records an adjustment; otherwise records initial allocation.
+ * Reverses any previous active INITIAL_ALLOCATION and creates a new INITIAL_ALLOCATION
+ * with the exact specified amount (or resets to 0 if amount is 0).
  */
 export async function setInitialCapital(
   householdId: string,
@@ -586,42 +587,58 @@ export async function setInitialCapital(
   portfolioOwnerId: string,
   amount: number,
   notes?: string
-): Promise<CapitalTransaction> {
+): Promise<CapitalTransaction | null> {
   const supabase = await createSupabaseServerClient();
-
-  const { data: existing } = await supabase
-    .from('capital_transactions')
-    .select('*')
-    .eq('household_id', householdId)
-    .eq('portfolio_owner_id', portfolioOwnerId)
-    .eq('tx_type', 'INITIAL_ALLOCATION')
-    .is('reversal_of', null)
-    .maybeSingle();
-
   const today = new Date().toISOString().split('T')[0];
 
-  if (!existing) {
+  // 1. Fetch all INITIAL_ALLOCATION and reversal records for this owner
+  const { data: allTx } = await supabase
+    .from('capital_transactions')
+    .select('id, tx_type, amount, reversal_of')
+    .eq('household_id', householdId)
+    .eq('portfolio_owner_id', portfolioOwnerId);
+
+  const reversedIds = new Set(
+    (allTx || [])
+      .filter((t) => t.reversal_of)
+      .map((t) => t.reversal_of as string)
+  );
+
+  // Active initial allocations (not reversed, not a reversal record)
+  const activeInitialRecords = (allTx || []).filter(
+    (t) => t.tx_type === 'INITIAL_ALLOCATION' && !t.reversal_of && !reversedIds.has(t.id)
+  );
+
+  // 2. Reverse previous active INITIAL_ALLOCATION records to preserve audit trail
+  for (const existing of activeInitialRecords) {
+    await supabase
+      .from('capital_transactions')
+      .insert({
+        household_id: householdId,
+        portfolio_owner_id: portfolioOwnerId,
+        strategy_bucket: 'INTRADAY',
+        tx_type: 'INITIAL_ALLOCATION',
+        amount: existing.amount,
+        tx_date: today,
+        created_by: userId,
+        notes: `REVERSAL: Initial capital updated to ₹${amount.toLocaleString('en-IN')}`,
+        reversal_of: existing.id,
+      });
+  }
+
+  // 3. If amount > 0, insert the new INITIAL_ALLOCATION record
+  if (amount > 0) {
     return createCapitalTransaction(householdId, userId, {
       portfolioOwnerId,
       strategyBucket: 'INTRADAY',
       txType: 'INITIAL_ALLOCATION',
       amount,
       txDate: today,
-      notes: notes || 'Initial invested capital',
+      notes: notes || `Initial invested capital set to ₹${amount.toLocaleString('en-IN')}`,
     });
   }
 
-  const prevAmount = Number(existing.amount);
-  return createCapitalTransaction(householdId, userId, {
-    portfolioOwnerId,
-    strategyBucket: 'INTRADAY',
-    txType: 'CAPITAL_ADJUSTMENT',
-    amount: Math.abs(amount - prevAmount),
-    txDate: today,
-    previousAmount: prevAmount,
-    newAmount: amount,
-    notes: notes || `Adjusted initial capital to ₹${amount.toLocaleString('en-IN')}`,
-  });
+  return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -30,13 +30,15 @@ export function SetInitialCapitalModal({
   const husband = persons.find(
     (p) =>
       p.relationshipLabel.toLowerCase().includes('husband') ||
-      p.displayName.toLowerCase().includes('husband')
+      p.displayName.toLowerCase().includes('husband') ||
+      p.relationshipLabel.toLowerCase().includes('self')
   ) || persons[0];
 
   const wife = persons.find(
     (p) =>
       p.relationshipLabel.toLowerCase().includes('wife') ||
-      p.displayName.toLowerCase().includes('wife')
+      p.displayName.toLowerCase().includes('wife') ||
+      p.relationshipLabel.toLowerCase().includes('spouse')
   ) || persons[1];
 
   const [husbandAmount, setHusbandAmount] = useState(husbandInitial > 0 ? String(husbandInitial) : '');
@@ -66,7 +68,7 @@ export function SetInitialCapitalModal({
       setError('Capital amounts cannot be negative.');
       return;
     }
-    if (hNum === 0 && wNum === 0) {
+    if (husbandAmount === '' && wifeAmount === '') {
       setError('Please enter an initial capital amount for Husband or Wife.');
       return;
     }
@@ -80,7 +82,7 @@ export function SetInitialCapitalModal({
 
       const promises: Promise<Response>[] = [];
 
-      if (targetHusbandId && hNum > 0) {
+      if (targetHusbandId && husbandAmount !== '') {
         promises.push(
           fetch('/api/capital/initial', {
             method: 'POST',
@@ -94,7 +96,7 @@ export function SetInitialCapitalModal({
         );
       }
 
-      if (targetWifeId && wNum > 0) {
+      if (targetWifeId && wifeAmount !== '') {
         promises.push(
           fetch('/api/capital/initial', {
             method: 'POST',
@@ -127,13 +129,13 @@ export function SetInitialCapitalModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-lg rounded-3xl bg-[var(--card)] border border-[var(--border)] shadow-2xl overflow-hidden p-6 space-y-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+      <div className="w-full max-w-lg rounded-3xl bg-[var(--card)] border border-[var(--border)] shadow-2xl overflow-hidden p-6 space-y-6 animate-scale-in">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center">
-              <Heart className="w-4 h-4 fill-current" />
+            <div className="w-9 h-9 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center animate-soft-glow">
+              <Heart className="w-4 h-4 fill-current animate-heart-beat" />
             </div>
             <div>
               <h3 className="text-base font-bold text-[var(--foreground)]">Set Initial Invested Capital</h3>

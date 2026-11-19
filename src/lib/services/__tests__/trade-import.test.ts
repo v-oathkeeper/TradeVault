@@ -620,4 +620,61 @@ describe('JSON Trade Import — Comprehensive 12-Scenario Suite', () => {
     expect(trade.initial_risk_rupees).toBe(500);
     expect(trade.realized_r_multiple).toBeUndefined(); // null/undefined for open trade
   });
+
+  // 13. Import Gemini trading skill export directly as a trade
+  it('Scenario 13: Directly imports Gemini trading skill export with CNC, notes quantity, and milestones', async () => {
+    const geminiJson = JSON.stringify({
+      schema_version: '1.0',
+      source: 'gemini_trading_skill',
+      updated_at: '2026-11-19T15:10:00+05:30',
+      symbol: 'PPLPHARMA',
+      exchange: 'NSE',
+      trading_type: 'CNC',
+      direction: 'LONG',
+      entry_price: 239.94,
+      initial_stop_loss: 230.5,
+      milestones: {
+        milestone_1: {
+          target_price: 254.1,
+          status: 'PENDING',
+          trailing_stop_loss: null,
+        },
+        milestone_2: {
+          target_price: 258.85,
+          status: 'PENDING',
+          trailing_stop_loss: null,
+        },
+        milestone_3: {
+          target_price: 266.4,
+          status: 'PENDING',
+          trailing_stop_loss: null,
+        },
+      },
+      last_reached_milestone: null,
+      current_trailing_stop_loss: null,
+      notes:
+        'Filled 30 shares at 239.94 (15:08:41 IST). Milestone levels revised from 239.75 pre-fill estimate to actual 239.94 fill (1R = 9.44). On M1 (254.10), trail stop to SL2 Estimated Net Breakeven (241.00); on M2 (258.85), trail stop to SL3 (254.10); M3 target at 266.40.',
+    });
+
+    const parseResult = parseRawJsonText(geminiJson);
+    expect(parseResult.success).toBe(true);
+
+    const validation = validateTradesPayload({
+      rawTrades: parseResult.rawTrades!,
+      householdId,
+      userRole: 'ADMIN',
+      persons: mockPersons,
+      brokers: mockBrokers,
+    });
+
+    expect(validation.isValid).toBe(true);
+    const item = validation.trades[0];
+    expect(item.symbol).toBe('PPLPHARMA');
+    expect(item.direction).toBe('LONG');
+    expect(item.quantity).toBe(30); // Extracted from notes!
+    expect(item.dbTradeType).toBe('DELIVERY'); // CNC resolved to DELIVERY
+    expect(item.milestone1_target).toBe(254.1);
+    expect(item.milestone2_target).toBe(258.85);
+    expect(item.milestone3_target).toBe(266.4);
+  });
 });

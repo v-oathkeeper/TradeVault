@@ -54,10 +54,9 @@ export async function previewGeminiMilestones(
   if (tradeIdToMatch) {
     query = query.eq('id', tradeIdToMatch);
   } else if (parsed.data.symbol) {
-    // Prefer open trade with same symbol
+    // Prefer the most recent open trade with same symbol
     query = query
       .eq('symbol', parsed.data.symbol)
-      .order('status', { ascending: false }) // OPEN before CLOSED if alphanumeric
       .order('entry_at', { ascending: false });
   }
 

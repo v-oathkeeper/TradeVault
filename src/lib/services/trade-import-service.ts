@@ -11,6 +11,10 @@ import {
   type ValidatedTradeItem,
   type ImportValidationResult,
 } from '@/lib/validation/import-schema';
+import {
+  parseAndValidateGeminiJson,
+  type NormalizedGeminiMilestones,
+} from '@/lib/validation/gemini-schema';
 import { UUID_REGEX } from '@/lib/validation/schemas';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/database';
@@ -234,17 +238,17 @@ export function resolveTradeType(
   error?: string;
 } {
   const upper = tradeTypeInput.trim().toUpperCase();
-  if (upper === 'INTRADAY') {
+  if (upper === 'INTRADAY' || upper === 'MIS') {
     return { tradeType: 'INTRADAY', dbTradeType: 'INTRADAY' };
   }
-  if (upper === 'DELIVERY') {
+  if (upper === 'DELIVERY' || upper === 'CNC') {
     return { tradeType: 'DELIVERY', dbTradeType: 'DELIVERY' };
   }
   if (upper === 'SWING') {
     return { tradeType: 'SWING', dbTradeType: 'DELIVERY' };
   }
   return {
-    error: `Invalid trade_type "${tradeTypeInput}". Supported trade types: INTRADAY, DELIVERY, SWING`,
+    error: `Invalid trade_type "${tradeTypeInput}". Supported trade types: INTRADAY, DELIVERY, SWING, CNC, MIS`,
   };
 }
 
@@ -338,15 +342,15 @@ export function parseRawJsonText(jsonText: string): {
     rawTrades = obj.trades as Record<string, unknown>[];
   } else if (obj.trade && typeof obj.trade === 'object') {
     rawTrades = [obj.trade as Record<string, unknown>];
-  } else if ('symbol' in obj && 'portfolio_owner' in obj) {
-    // Single trade object at root level
+  } else if ('symbol' in obj || 'scrip' in obj || 'ticker' in obj) {
+    // Single trade object at root level (including Gemini trading skill exports)
     const singleTrade = { ...obj };
     delete singleTrade.schema_version;
     rawTrades = [singleTrade];
   } else {
     return {
       success: false,
-      error: 'JSON must contain a "trades" array with at least one trade',
+      error: 'JSON must contain a "trades" array or a valid trade object',
     };
   }
 
@@ -394,6 +398,44 @@ export function validateTradesPayload({
     const raw = rawTrades[index] || {};
     const errors: string[] = [];
     const fieldErrors: Record<string, string> = {};
+
+    // Auto-normalize Gemini trading skill export format:
+    const isGeminiExport = raw.source === 'gemini_trading_skill' || Boolean(raw.milestones);
+    if (isGeminiExport) {
+      if (!raw.trade_type && raw.trading_type) {
+        raw.trade_type = raw.trading_type;
+      }
+      if (!raw.portfolio_owner) {
+        raw.portfolio_owner = 'me';
+      }
+      if (!raw.broker) {
+        raw.broker = 'ZERODHA';
+      }
+      if (raw.quantity === undefined || raw.quantity === null || raw.quantity === '') {
+        const notesText = String(raw.notes || '');
+        const match =
+          notesText.match(/(?:filled\s+|qty[:\s]+|quantity[:\s]+)?(\d+)\s+shares/i) ||
+          notesText.match(/\bqty[:\s]+(\d+)\b/i) ||
+          notesText.match(/\b(\d+)\s+shares\b/i);
+        raw.quantity = match ? parseInt(match[1], 10) : 1;
+      }
+      if ((raw.target_price === undefined || raw.target_price === null || raw.target_price === '') && raw.milestones) {
+        const ms = raw.milestones as Record<string, any>;
+        const m1 = ms.milestone_1 || ms['milestone-1'] || ms.m1 || ms.milestone1;
+        if (m1?.target_price) {
+          raw.target_price = Number(m1.target_price);
+        }
+      }
+    }
+
+    // Check for Gemini milestones in the payload
+    let geminiMilestones: NormalizedGeminiMilestones | undefined;
+    if (raw.milestones) {
+      const parsedMs = parseAndValidateGeminiJson(raw as Record<string, unknown>);
+      if (parsedMs.success && parsedMs.data) {
+        geminiMilestones = parsedMs.data;
+      }
+    }
 
     // 1. Required fields presence check
     const requiredFields = [
@@ -673,6 +715,19 @@ export function validateTradesPayload({
       r3Price,
       isDuplicate,
       duplicateWarning,
+      milestone1_target: geminiMilestones?.milestone1?.targetPrice ?? null,
+      milestone1_status: geminiMilestones?.milestone1?.status ?? null,
+      milestone1_trailing_sl: geminiMilestones?.milestone1?.trailingStopLoss ?? null,
+      milestone2_target: geminiMilestones?.milestone2?.targetPrice ?? null,
+      milestone2_status: geminiMilestones?.milestone2?.status ?? null,
+      milestone2_trailing_sl: geminiMilestones?.milestone2?.trailingStopLoss ?? null,
+      milestone3_target: geminiMilestones?.milestone3?.targetPrice ?? null,
+      milestone3_status: geminiMilestones?.milestone3?.status ?? null,
+      milestone3_trailing_sl: geminiMilestones?.milestone3?.trailingStopLoss ?? null,
+      current_trailing_sl: geminiMilestones?.currentTrailingStopLoss ?? null,
+      last_reached_milestone: geminiMilestones?.lastReachedMilestone ?? null,
+      milestones_updated_at: geminiMilestones?.timestamp ?? null,
+      raw_gemini_input: raw,
     });
   }
 
@@ -820,6 +875,18 @@ export async function executeTradeImport({
           r3_price: item.r3Price ?? null,
           strategy_name: item.strategy ?? (item.tradeType === 'SWING' ? 'SWING' : null),
           current_stop_loss: item.initialStopLoss,
+          milestone1_target: item.milestone1_target ?? null,
+          milestone1_status: item.milestone1_status ?? null,
+          milestone1_trailing_sl: item.milestone1_trailing_sl ?? null,
+          milestone2_target: item.milestone2_target ?? null,
+          milestone2_status: item.milestone2_status ?? null,
+          milestone2_trailing_sl: item.milestone2_trailing_sl ?? null,
+          milestone3_target: item.milestone3_target ?? null,
+          milestone3_status: item.milestone3_status ?? null,
+          milestone3_trailing_sl: item.milestone3_trailing_sl ?? null,
+          current_trailing_sl: item.current_trailing_sl ?? null,
+          last_reached_milestone: item.last_reached_milestone ?? null,
+          milestones_updated_at: item.milestones_updated_at ?? null,
           created_by: userId,
           created_at: now,
           updated_at: now,
@@ -850,6 +917,37 @@ export async function executeTradeImport({
         throw new Error(
           `Failed to create initial stop-loss history for ${item.symbol}: ${slError.message}`
         );
+      }
+
+      // If milestones were imported, insert into trade_milestone_history
+      if (
+        item.milestone1_target != null ||
+        item.milestone2_target != null ||
+        item.milestone3_target != null ||
+        item.current_trailing_sl != null
+      ) {
+        try {
+          await (supabase as any).from('trade_milestone_history').insert({
+            trade_id: trade.id,
+            milestone1_target: item.milestone1_target ?? null,
+            milestone1_status: item.milestone1_status ?? 'PENDING',
+            milestone1_trailing_sl: item.milestone1_trailing_sl ?? null,
+            milestone2_target: item.milestone2_target ?? null,
+            milestone2_status: item.milestone2_status ?? 'PENDING',
+            milestone2_trailing_sl: item.milestone2_trailing_sl ?? null,
+            milestone3_target: item.milestone3_target ?? null,
+            milestone3_status: item.milestone3_status ?? 'PENDING',
+            milestone3_trailing_sl: item.milestone3_trailing_sl ?? null,
+            current_trailing_sl: item.current_trailing_sl ?? null,
+            last_reached_milestone: item.last_reached_milestone ?? null,
+            notes: item.notes ?? null,
+            raw_gemini_input: item.raw_gemini_input ?? null,
+            created_by: userId,
+            created_at: item.milestones_updated_at ?? now,
+          });
+        } catch (mErr) {
+          console.warn('Could not record trade_milestone_history on trade import:', mErr);
+        }
       }
 
       successful.push({

@@ -35,24 +35,26 @@ export function CapitalCards({
     summary.owners.find(
       (o) =>
         o.relationshipLabel.toLowerCase().includes('husband') ||
-        o.displayName.toLowerCase().includes('husband')
+        o.displayName.toLowerCase().includes('husband') ||
+        o.relationshipLabel.toLowerCase().includes('self')
     ) || summary.owners[0];
 
   const wifeOwner =
     summary.owners.find(
       (o) =>
         o.relationshipLabel.toLowerCase().includes('wife') ||
-        o.displayName.toLowerCase().includes('wife')
+        o.displayName.toLowerCase().includes('wife') ||
+        o.relationshipLabel.toLowerCase().includes('spouse')
     ) || summary.owners[1];
 
   return (
     <div className="space-y-6">
       {/* ── 1. Couple's Combined Overview Banner ───────────────────────── */}
-      <div className="rounded-3xl border border-rose-200/60 dark:border-rose-900/40 bg-gradient-to-br from-rose-500/5 via-champagne-500/5 to-lavender-500/5 p-6 shadow-sm">
+      <div className="rounded-3xl border border-rose-200/60 dark:border-rose-900/40 bg-gradient-to-br from-rose-500/5 via-champagne-500/5 to-lavender-500/5 p-6 shadow-sm animate-slide-up">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-[var(--border)]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-500 to-rose-600 text-white flex items-center justify-center shadow-md">
-              <Heart className="w-5 h-5 fill-current" />
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-500 to-rose-600 text-white flex items-center justify-center shadow-md animate-soft-glow">
+              <Heart className="w-5 h-5 fill-current animate-heart-beat" />
             </div>
             <div>
               <h3 className="text-base font-bold text-[var(--foreground)]">Couple's Capital Overview</h3>
@@ -65,7 +67,7 @@ export function CapitalCards({
               <button
                 type="button"
                 onClick={onSetInitialCapital}
-                className="px-3.5 py-2 rounded-xl border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--background)] text-xs font-semibold text-[var(--foreground)] transition-all shadow-sm flex items-center gap-1.5"
+                className="px-3.5 py-2 rounded-xl border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--background)] text-xs font-semibold text-[var(--foreground)] transition-all shadow-sm flex items-center gap-1.5 hover:scale-105 active:scale-95 duration-150"
               >
                 <Sparkles className="w-3.5 h-3.5 text-rose-500" />
                 <span>Set Initial Capital</span>
@@ -73,7 +75,7 @@ export function CapitalCards({
               <button
                 type="button"
                 onClick={() => onAddMoney?.()}
-                className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5"
+                className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5 hover:scale-105 active:scale-95 duration-150"
               >
                 <ArrowUpCircle className="w-3.5 h-3.5" />
                 <span>Add Money</span>
@@ -81,7 +83,7 @@ export function CapitalCards({
               <button
                 type="button"
                 onClick={() => onWithdrawMoney?.()}
-                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5"
+                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5 hover:scale-105 active:scale-95 duration-150"
               >
                 <ArrowDownCircle className="w-3.5 h-3.5" />
                 <span>Withdraw Money</span>
@@ -93,7 +95,7 @@ export function CapitalCards({
         {/* Combined Figures Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-5">
           {/* Combined Invested Capital */}
-          <div className="rounded-2xl bg-[var(--card)]/80 backdrop-blur-sm border border-[var(--border)] p-4 space-y-1 shadow-sm">
+          <div className="rounded-2xl bg-[var(--card)]/90 backdrop-blur-sm border border-[var(--border)] p-4 space-y-1 shadow-sm card-hover animate-scale-in stagger-1">
             <span className="text-[11px] font-semibold text-[var(--muted)] uppercase tracking-wider block">
               Combined Invested Capital
             </span>
@@ -107,7 +109,7 @@ export function CapitalCards({
           </div>
 
           {/* Combined Available Profit */}
-          <div className="rounded-2xl bg-[var(--card)]/80 backdrop-blur-sm border border-[var(--border)] p-4 space-y-1 shadow-sm">
+          <div className="rounded-2xl bg-[var(--card)]/90 backdrop-blur-sm border border-[var(--border)] p-4 space-y-1 shadow-sm card-hover animate-scale-in stagger-2">
             <span className="text-[11px] font-semibold text-[var(--muted)] uppercase tracking-wider block">
               Available Profit for Withdrawal
             </span>
@@ -121,7 +123,7 @@ export function CapitalCards({
           </div>
 
           {/* Combined All-time Profit */}
-          <div className="rounded-2xl bg-[var(--card)]/80 backdrop-blur-sm border border-[var(--border)] p-4 space-y-1 shadow-sm">
+          <div className="rounded-2xl bg-[var(--card)]/90 backdrop-blur-sm border border-[var(--border)] p-4 space-y-1 shadow-sm card-hover animate-scale-in stagger-3">
             <span className="text-[11px] font-semibold text-[var(--muted)] uppercase tracking-wider block">
               All-Time Net Realized Profit
             </span>
@@ -145,15 +147,16 @@ export function CapitalCards({
 
       {/* ── 2. Individual Account Cards (Husband & Wife) ────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {summary.owners.map((owner) => {
+        {summary.owners.map((owner, ownerIdx) => {
           const isHusband =
             owner.relationshipLabel.toLowerCase().includes('husband') ||
-            owner.displayName.toLowerCase().includes('husband');
+            owner.displayName.toLowerCase().includes('husband') ||
+            owner.relationshipLabel.toLowerCase().includes('self');
 
           return (
             <div
               key={owner.portfolioOwnerId}
-              className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm space-y-4 hover:border-rose-300 dark:hover:border-rose-900/50 transition-all"
+              className={`rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm space-y-4 hover:border-rose-300 dark:hover:border-rose-900/50 card-hover animate-slide-up stagger-${ownerIdx + 1}`}
             >
               {/* Account Header */}
               <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">

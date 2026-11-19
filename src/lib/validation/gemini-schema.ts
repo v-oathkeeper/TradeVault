@@ -137,10 +137,25 @@ export function parseAndValidateGeminiJson(input: string | Record<string, unknow
         };
       }
     } else {
-      // Format 2: Objects `milestone1: { ... }` or `milestone_1: { ... }`
-      const rawM1 = (raw.milestone1 || raw.milestone_1 || raw.m1) as Record<string, unknown> | undefined;
-      const rawM2 = (raw.milestone2 || raw.milestone_2 || raw.m2) as Record<string, unknown> | undefined;
-      const rawM3 = (raw.milestone3 || raw.milestone_3 || raw.m3) as Record<string, unknown> | undefined;
+      // Format 2: Nested object under `milestones` key: { milestones: { milestone_1: {...}, ... } }
+      // OR top-level keys: `milestone1: { ... }` or `milestone_1: { ... }`
+      let rawM1: Record<string, unknown> | undefined;
+      let rawM2: Record<string, unknown> | undefined;
+      let rawM3: Record<string, unknown> | undefined;
+
+      if (raw.milestones && typeof raw.milestones === 'object' && !Array.isArray(raw.milestones)) {
+        // Nested format (actual Gemini skill output):
+        // { milestones: { milestone_1: { target_price, status, trailing_stop_loss }, ... } }
+        const ms = raw.milestones as Record<string, unknown>;
+        rawM1 = (ms.milestone_1 || ms['milestone-1'] || ms.m1 || ms.milestone1) as Record<string, unknown> | undefined;
+        rawM2 = (ms.milestone_2 || ms['milestone-2'] || ms.m2 || ms.milestone2) as Record<string, unknown> | undefined;
+        rawM3 = (ms.milestone_3 || ms['milestone-3'] || ms.m3 || ms.milestone3) as Record<string, unknown> | undefined;
+      } else {
+        // Top-level flat keys: `milestone1: { ... }` or `milestone_1: { ... }`
+        rawM1 = (raw.milestone1 || raw.milestone_1 || raw.m1) as Record<string, unknown> | undefined;
+        rawM2 = (raw.milestone2 || raw.milestone_2 || raw.m2) as Record<string, unknown> | undefined;
+        rawM3 = (raw.milestone3 || raw.milestone_3 || raw.m3) as Record<string, unknown> | undefined;
+      }
 
       if (rawM1 && typeof rawM1 === 'object') {
         m1 = {

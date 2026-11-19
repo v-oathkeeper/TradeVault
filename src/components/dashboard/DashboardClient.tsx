@@ -280,7 +280,7 @@ export function DashboardClient({
       {/* ── 1. The 3 Primary Profit & Capital Cards ──────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Current Invested Capital */}
-        <div className="p-5 rounded-3xl bg-[var(--card)] border border-[var(--border)] shadow-sm space-y-2 hover:border-rose-300 dark:hover:border-rose-900/40 transition-all">
+        <div className="p-5 rounded-3xl bg-[var(--card)] border border-[var(--border)] shadow-sm space-y-2 hover:border-rose-300 dark:hover:border-rose-900/40 card-hover animate-slide-up stagger-1">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
               Invested Capital
@@ -305,7 +305,7 @@ export function DashboardClient({
         </div>
 
         {/* Available Profit for Withdrawal */}
-        <div className="p-5 rounded-3xl bg-[var(--card)] border border-[var(--border)] shadow-sm space-y-2 hover:border-rose-300 dark:hover:border-rose-900/40 transition-all">
+        <div className="p-5 rounded-3xl bg-[var(--card)] border border-[var(--border)] shadow-sm space-y-2 hover:border-rose-300 dark:hover:border-rose-900/40 card-hover animate-slide-up stagger-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
               Available Profit
@@ -330,7 +330,7 @@ export function DashboardClient({
         </div>
 
         {/* All-time Net Realized Profit */}
-        <div className="p-5 rounded-3xl bg-[var(--card)] border border-[var(--border)] shadow-sm space-y-2 hover:border-rose-300 dark:hover:border-rose-900/40 transition-all">
+        <div className="p-5 rounded-3xl bg-[var(--card)] border border-[var(--border)] shadow-sm space-y-2 hover:border-rose-300 dark:hover:border-rose-900/40 card-hover animate-slide-up stagger-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
               All-Time Realized Profit
