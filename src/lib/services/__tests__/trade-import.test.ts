@@ -52,6 +52,7 @@ describe('JSON Trade Import — Comprehensive 12-Scenario Suite', () => {
     const database = {
       trades: [] as any[],
       stop_loss_history: [] as any[],
+      trade_milestone_history: [] as any[],
     };
 
     return {
@@ -92,7 +93,11 @@ describe('JSON Trade Import — Comprehensive 12-Scenario Suite', () => {
               };
             }
             if (table === 'stop_loss_history') {
-              database.stop_loss_history.push(data);
+              database.stop_loss_history.push(...(Array.isArray(data) ? data : [data]));
+              return Promise.resolve({ data, error: null });
+            }
+            if (table === 'trade_milestone_history') {
+              database.trade_milestone_history.push(data);
               return Promise.resolve({ data, error: null });
             }
             return Promise.resolve({ data: null, error: null });
@@ -676,5 +681,71 @@ describe('JSON Trade Import — Comprehensive 12-Scenario Suite', () => {
     expect(item.milestone1_target).toBe(254.1);
     expect(item.milestone2_target).toBe(258.85);
     expect(item.milestone3_target).toBe(266.4);
+  });
+
+  it('persists flat milestone fields from a regular trade import even when the batch RPC is available', async () => {
+    const validation = validateTradesPayload({
+      rawTrades: [
+        {
+          portfolio_owner: 'me',
+          broker: 'ZERODHA',
+          exchange: 'NSE',
+          symbol: 'MILESTONECO',
+          trade_type: 'SWING',
+          direction: 'LONG',
+          entry_price: 100,
+          initial_stop_loss: 90,
+          quantity: 10,
+          milestone1_target: 110,
+          milestone1_trailing_sl: 101,
+          milestone2Target: 120,
+          milestone2TrailingSl: 110,
+          current_trailing_sl: 101,
+        },
+      ],
+      householdId,
+      userRole: 'ADMIN',
+      persons: mockPersons,
+      brokers: mockBrokers,
+    });
+
+    expect(validation.isValid).toBe(true);
+    expect(validation.trades[0]).toMatchObject({
+      milestone1_target: 110,
+      milestone1_trailing_sl: 101,
+      milestone2_target: 120,
+      milestone2_trailing_sl: 110,
+      current_trailing_sl: 101,
+    });
+
+    const mockSupabase = createMockSupabase({ rpcAvailable: true });
+    const result = await executeTradeImport({
+      validatedTrades: validation.trades,
+      householdId,
+      userId: adminUserId,
+      supabase: mockSupabase as any,
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockSupabase.rpc).not.toHaveBeenCalled();
+    expect(mockSupabase.database.trades[0]).toMatchObject({
+      milestone1_target: 110,
+      milestone1_trailing_sl: 101,
+      milestone2_target: 120,
+      milestone2_trailing_sl: 110,
+      current_trailing_sl: 101,
+      current_stop_loss: 101,
+    });
+    expect(mockSupabase.database.stop_loss_history).toHaveLength(2);
+    expect(mockSupabase.database.stop_loss_history[1]).toMatchObject({
+      previous_stop: 90,
+      new_stop: 101,
+      stop_type: 'TRAIL',
+    });
+    expect(mockSupabase.database.trade_milestone_history[0]).toMatchObject({
+      milestone1_target: 110,
+      milestone2_target: 120,
+      current_trailing_sl: 101,
+    });
   });
 });

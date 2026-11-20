@@ -428,12 +428,53 @@ export function validateTradesPayload({
       }
     }
 
-    // Check for Gemini milestones in the payload
+    // Milestones may be nested under `milestones` or supplied as flat fields
+    // alongside a regular trade import. Normalize both formats through the same
+    // parser so validated values are not silently discarded.
     let geminiMilestones: NormalizedGeminiMilestones | undefined;
-    if (raw.milestones) {
-      const parsedMs = parseAndValidateGeminiJson(raw as Record<string, unknown>);
+    const milestoneContainer = raw.milestones;
+    const hasMilestoneContainer = Array.isArray(milestoneContainer)
+      ? milestoneContainer.length > 0
+      : milestoneContainer !== null && typeof milestoneContainer === 'object'
+        ? Object.keys(milestoneContainer).length > 0
+        : milestoneContainer !== undefined && milestoneContainer !== '';
+    const hasMilestoneFields =
+      hasMilestoneContainer ||
+      Object.entries(raw).some(
+        ([key, value]) =>
+          /^(?:milestone[_]?[123]|m[123])(?:_|[A-Z]|$)/.test(key) &&
+          value !== undefined &&
+          value !== null &&
+          value !== ''
+      ) ||
+      [
+        'current_trailing_sl',
+        'current_trailing_stop_loss',
+        'current_trailing_stop',
+        'currentTrailingSl',
+        'currentTrailingStopLoss',
+        'currentActiveTrailingSl',
+        'currentActiveTrailingStopLoss',
+        'current_active_trailing_sl',
+        'current_active_trailing_stop_loss',
+        'active_trailing_sl',
+        'active_trailing_stop_loss',
+        'activeTrailingSl',
+        'activeTrailingStopLoss',
+        'active_stop_loss',
+        'current_stop_loss',
+        'currentStopLoss',
+        'trailing_stop_loss',
+        'trailing_sl',
+      ].some((key) => raw[key] !== undefined && raw[key] !== null && raw[key] !== '');
+    if (hasMilestoneFields) {
+      const parsedMs = parseAndValidateGeminiJson(raw);
       if (parsedMs.success && parsedMs.data) {
         geminiMilestones = parsedMs.data;
+      } else {
+        const milestoneError = parsedMs.error || 'Milestone values could not be read';
+        errors.push(`Milestones: ${milestoneError}`);
+        fieldErrors.milestones = milestoneError;
       }
     }
 
@@ -781,57 +822,83 @@ export async function executeTradeImport({
     };
   }
 
-  // Attempt atomic PostgreSQL RPC procedure first (Migration 005)
-  try {
-    const payloadForRpc = validList.map((t) => ({
-      portfolio_owner_id: t.portfolioOwnerId,
-      broker_id: t.brokerId,
-      symbol: t.symbol,
-      exchange: t.exchange,
-      trade_type: t.dbTradeType,
-      direction: t.direction,
-      quantity: t.quantity,
-      entry_price: t.entryPrice,
-      entry_at: new Date().toISOString(),
-      initial_stop_loss: t.initialStopLoss,
-      initial_risk_per_share: t.riskPerShare ?? null,
-      initial_risk_rupees: t.riskRupees ?? null,
-      initial_risk_pct: t.riskPct ?? null,
-      planned_target: t.targetPrice ?? null,
-      planned_rr: t.plannedRR ?? null,
-      r1_price: t.r1Price ?? null,
-      r2_price: t.r2Price ?? null,
-      r3_price: t.r3Price ?? null,
-      strategy_name: t.strategy ?? (t.tradeType === 'SWING' ? 'SWING' : null),
-      notes: t.notes ?? null,
-    }));
+  // The deployed batch RPC predates milestone columns. Route imports that
+  // carry milestone updates (or target an existing trade) through the direct
+  // writer so those values are persisted instead of being dropped by the RPC.
+  const hasMilestoneData = (item: ValidatedTradeItem) =>
+    item.milestone1_target != null ||
+    item.milestone1_trailing_sl != null ||
+    item.milestone2_target != null ||
+    item.milestone2_trailing_sl != null ||
+    item.milestone3_target != null ||
+    item.milestone3_trailing_sl != null ||
+    item.current_trailing_sl != null;
+  const targetsExistingTrade = (item: ValidatedTradeItem) => {
+    const rawInput = item.raw_gemini_input as Record<string, unknown> | undefined;
+    const tradeId = rawInput?.trade_id || rawInput?.tradeId || rawInput?.id;
+    return typeof tradeId === 'string' && UUID_REGEX.test(tradeId);
+  };
 
-    const { data: rpcResult, error: rpcError } = await supabase.rpc(
-      'import_trades_batch',
-      {
-        p_household_id: householdId,
-        p_user_id: userId,
-        p_trades: payloadForRpc,
-      }
-    );
-
-    if (!rpcError && rpcResult && typeof rpcResult === 'object' && 'success' in rpcResult && (rpcResult as { success: boolean }).success) {
-      const res = rpcResult as { success: boolean; imported_count: number; trade_ids: string[] };
-      const successful = validList.map((t, idx) => ({
-        index: t.index,
+  // Attempt atomic PostgreSQL RPC procedure first (Migration 005) for simple
+  // imports. It does not yet accept milestone fields or trade updates.
+  if (!validList.some((item) => hasMilestoneData(item) || targetsExistingTrade(item))) {
+    try {
+      const payloadForRpc = validList.map((t) => ({
+        portfolio_owner_id: t.portfolioOwnerId,
+        broker_id: t.brokerId,
         symbol: t.symbol,
-        id: res.trade_ids[idx] || '',
+        exchange: t.exchange,
+        trade_type: t.dbTradeType,
+        direction: t.direction,
+        quantity: t.quantity,
+        entry_price: t.entryPrice,
+        entry_at: new Date().toISOString(),
+        initial_stop_loss: t.initialStopLoss,
+        initial_risk_per_share: t.riskPerShare ?? null,
+        initial_risk_rupees: t.riskRupees ?? null,
+        initial_risk_pct: t.riskPct ?? null,
+        planned_target: t.targetPrice ?? null,
+        planned_rr: t.plannedRR ?? null,
+        r1_price: t.r1Price ?? null,
+        r2_price: t.r2Price ?? null,
+        r3_price: t.r3Price ?? null,
+        strategy_name: t.strategy ?? (t.tradeType === 'SWING' ? 'SWING' : null),
+        notes: t.notes ?? null,
       }));
-      return {
-        success: true,
-        importedCount: res.imported_count,
-        tradeIds: res.trade_ids,
-        summary: { successful, rejected: [] },
-      };
+
+      const { data: rpcResult, error: rpcError } = await supabase.rpc(
+        'import_trades_batch',
+        {
+          p_household_id: householdId,
+          p_user_id: userId,
+          p_trades: payloadForRpc,
+        }
+      );
+
+      if (
+        !rpcError &&
+        rpcResult &&
+        typeof rpcResult === 'object' &&
+        'success' in rpcResult &&
+        (rpcResult as { success: boolean }).success
+      ) {
+        const res = rpcResult as { success: boolean; imported_count: number; trade_ids: string[] };
+        const successful = validList.map((t, idx) => ({
+          index: t.index,
+          symbol: t.symbol,
+          id: res.trade_ids[idx] || '',
+        }));
+        return {
+          success: true,
+          importedCount: res.imported_count,
+          tradeIds: res.trade_ids,
+          summary: { successful, rejected: [] },
+        };
+      }
+    } catch (rpcErr) {
+      // If RPC is missing or fails, fall back to transactional client sequence with compensating rollback
+      console.warn('RPC import_trades_batch not available, falling back to direct insertion:', rpcErr);
     }
-  } catch (rpcErr) {
-    // If RPC is missing or fails, fall back to transactional client sequence with compensating rollback
-    console.warn('RPC import_trades_batch not available, falling back to direct insertion:', rpcErr);
   }
 
   // Fallback: Direct insert with compensating rollback on failure
@@ -859,21 +926,26 @@ export async function executeTradeImport({
 
         if (existingTrade) {
           const updatePayload: Record<string, unknown> = {
-            milestone1_target: item.milestone1_target ?? null,
-            milestone1_status: item.milestone1_status ?? null,
-            milestone1_trailing_sl: item.milestone1_trailing_sl ?? null,
-            milestone2_target: item.milestone2_target ?? null,
-            milestone2_status: item.milestone2_status ?? null,
-            milestone2_trailing_sl: item.milestone2_trailing_sl ?? null,
-            milestone3_target: item.milestone3_target ?? null,
-            milestone3_status: item.milestone3_status ?? null,
-            milestone3_trailing_sl: item.milestone3_trailing_sl ?? null,
-            current_trailing_sl: item.current_trailing_sl ?? null,
-            last_reached_milestone: item.last_reached_milestone ?? null,
-            milestones_updated_at: item.milestones_updated_at ?? now,
             notes: item.notes ?? undefined,
             updated_at: now,
           };
+
+          if (hasMilestoneData(item)) {
+            Object.assign(updatePayload, {
+              milestone1_target: item.milestone1_target ?? null,
+              milestone1_status: item.milestone1_status ?? null,
+              milestone1_trailing_sl: item.milestone1_trailing_sl ?? null,
+              milestone2_target: item.milestone2_target ?? null,
+              milestone2_status: item.milestone2_status ?? null,
+              milestone2_trailing_sl: item.milestone2_trailing_sl ?? null,
+              milestone3_target: item.milestone3_target ?? null,
+              milestone3_status: item.milestone3_status ?? null,
+              milestone3_trailing_sl: item.milestone3_trailing_sl ?? null,
+              current_trailing_sl: item.current_trailing_sl ?? null,
+              last_reached_milestone: item.last_reached_milestone ?? null,
+              milestones_updated_at: item.milestones_updated_at ?? now,
+            });
+          }
 
           if (item.current_trailing_sl != null) {
             updatePayload.current_stop_loss = item.current_trailing_sl;
@@ -896,27 +968,29 @@ export async function executeTradeImport({
           insertedTradeIds.push(existingTrade.id);
           successful.push({ index: item.index, symbol: item.symbol, id: existingTrade.id });
 
-          try {
-            await (supabase as any).from('trade_milestone_history').insert({
-              trade_id: existingTrade.id,
-              milestone1_target: item.milestone1_target ?? null,
-              milestone1_status: item.milestone1_status ?? 'PENDING',
-              milestone1_trailing_sl: item.milestone1_trailing_sl ?? null,
-              milestone2_target: item.milestone2_target ?? null,
-              milestone2_status: item.milestone2_status ?? 'PENDING',
-              milestone2_trailing_sl: item.milestone2_trailing_sl ?? null,
-              milestone3_target: item.milestone3_target ?? null,
-              milestone3_status: item.milestone3_status ?? 'PENDING',
-              milestone3_trailing_sl: item.milestone3_trailing_sl ?? null,
-              current_trailing_sl: item.current_trailing_sl ?? null,
-              last_reached_milestone: item.last_reached_milestone ?? null,
-              notes: item.notes ?? null,
-              raw_gemini_input: item.raw_gemini_input ?? null,
-              created_by: userId,
-              created_at: item.milestones_updated_at ?? now,
-            });
-          } catch (mErr) {
-            console.warn('Could not record milestone history on trade update:', mErr);
+          if (hasMilestoneData(item)) {
+            try {
+              await (supabase as any).from('trade_milestone_history').insert({
+                trade_id: existingTrade.id,
+                milestone1_target: item.milestone1_target ?? null,
+                milestone1_status: item.milestone1_status ?? 'PENDING',
+                milestone1_trailing_sl: item.milestone1_trailing_sl ?? null,
+                milestone2_target: item.milestone2_target ?? null,
+                milestone2_status: item.milestone2_status ?? 'PENDING',
+                milestone2_trailing_sl: item.milestone2_trailing_sl ?? null,
+                milestone3_target: item.milestone3_target ?? null,
+                milestone3_status: item.milestone3_status ?? 'PENDING',
+                milestone3_trailing_sl: item.milestone3_trailing_sl ?? null,
+                current_trailing_sl: item.current_trailing_sl ?? null,
+                last_reached_milestone: item.last_reached_milestone ?? null,
+                notes: item.notes ?? null,
+                raw_gemini_input: item.raw_gemini_input ?? null,
+                created_by: userId,
+                created_at: item.milestones_updated_at ?? now,
+              });
+            } catch (mErr) {
+              console.warn('Could not record milestone history on trade update:', mErr);
+            }
           }
 
           continue;
@@ -954,7 +1028,7 @@ export async function executeTradeImport({
           r2_price: item.r2Price ?? null,
           r3_price: item.r3Price ?? null,
           strategy_name: item.strategy ?? (item.tradeType === 'SWING' ? 'SWING' : null),
-          current_stop_loss: item.initialStopLoss,
+          current_stop_loss: item.current_trailing_sl ?? item.initialStopLoss,
           milestone1_target: item.milestone1_target ?? null,
           milestone1_status: item.milestone1_status ?? null,
           milestone1_trailing_sl: item.milestone1_trailing_sl ?? null,
@@ -982,16 +1056,36 @@ export async function executeTradeImport({
 
       insertedTradeIds.push(trade.id);
 
-      // Insert initial stop-loss history record
-      const { error: slError } = await supabase.from('stop_loss_history').insert({
-        trade_id: trade.id,
-        previous_stop: null,
-        new_stop: item.initialStopLoss,
-        stop_type: 'INITIAL',
-        notes: 'Initial stop-loss set via JSON trade import',
-        created_by: userId,
-        created_at: now,
-      });
+      // Record the initial and imported active stops together in one write.
+      const stopHistoryEntries: Database['public']['Tables']['stop_loss_history']['Insert'][] = [
+        {
+          trade_id: trade.id,
+          previous_stop: null,
+          new_stop: item.initialStopLoss,
+          stop_type: 'INITIAL',
+          notes: 'Initial stop-loss set via JSON trade import',
+          created_by: userId,
+          created_at: now,
+        },
+      ];
+      if (
+        item.current_trailing_sl != null &&
+        item.current_trailing_sl !== item.initialStopLoss
+      ) {
+        stopHistoryEntries.push({
+          trade_id: trade.id,
+          previous_stop: item.initialStopLoss,
+          new_stop: item.current_trailing_sl,
+          stop_type: 'TRAIL',
+          notes: 'Active trailing stop-loss imported with trade',
+          created_by: userId,
+          created_at: item.milestones_updated_at ?? now,
+        });
+      }
+
+      const { error: slError } = await supabase
+        .from('stop_loss_history')
+        .insert(stopHistoryEntries);
 
       if (slError) {
         throw new Error(

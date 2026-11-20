@@ -110,28 +110,9 @@ export const requireHouseholdMember = cache(async () => {
  */
 export const getHouseholdAppContext = cache(async () => {
   return measureAsync('getHouseholdAppContext', async () => {
-    const user = await requireAuth();
+    const membership = await requireHouseholdMember();
+    const { user, householdId, role } = membership;
     const supabase = await createSupabaseServerClient();
-
-    // Resolve authorization from the database so role changes take effect at
-    // once. Avoid a separate profile round trip on every page; auth metadata
-    // and email provide a display-name fallback without blocking the workspace.
-    const { data: member, error: memberError } = await supabase
-      .from('household_members')
-      .select('household_id, role')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (memberError) {
-      throw new AuthError('Unable to verify household membership', 503);
-    }
-    if (!member) {
-      throw new AuthError('Not a member of any household', 403);
-    }
-
-    const householdId = member.household_id;
-    const role = member.role as UserRole;
     const metadataName =
       typeof user.user_metadata?.full_name === 'string'
         ? user.user_metadata.full_name

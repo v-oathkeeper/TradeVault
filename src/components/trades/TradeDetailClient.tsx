@@ -64,8 +64,11 @@ export function TradeDetailClient({
 
   const hasMilestones =
     m1.target != null ||
+    m1.trailingSl != null ||
     m2.target != null ||
+    m2.trailingSl != null ||
     m3.target != null ||
+    m3.trailingSl != null ||
     trade.currentTrailingSl != null;
 
   return (
@@ -88,7 +91,7 @@ export function TradeDetailClient({
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30 text-xs font-semibold hover:bg-purple-500/20 transition-colors shadow-sm"
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Import Gemini Update</span>
+              <span>Update Milestones</span>
             </button>
             <Link
               href={`/trades/${trade.id}/edit`}
@@ -175,10 +178,10 @@ export function TradeDetailClient({
             </div>
             <div>
               <h3 className="text-base font-bold text-[var(--foreground)]">
-                Gemini Milestones &amp; Trailing Stop-Loss
+                Milestones &amp; Trailing Stop-Loss
               </h3>
               <p className="text-xs text-[var(--muted)]">
-                Targets and dynamic trailing stop-loss imported from Gemini trading skill
+                Planned targets and stop-loss levels saved with this trade
               </p>
             </div>
           </div>
@@ -246,7 +249,9 @@ export function TradeDetailClient({
               <div className="p-4 rounded-2xl bg-gradient-to-br from-rose-500/5 to-purple-500/5 border border-rose-500/20 flex items-center justify-between">
                 <div>
                   <span className="text-[10px] text-[var(--muted)] uppercase font-semibold block">
-                    Active Trailing Stop-Loss
+                    {trade.currentTrailingSl != null
+                      ? 'Active Trailing Stop-Loss'
+                      : 'Current Stop-Loss'}
                   </span>
                   <span className="text-lg font-bold font-mono text-rose-500">
                     {trade.currentTrailingSl != null
@@ -315,14 +320,14 @@ export function TradeDetailClient({
         ) : (
           <div className="p-6 rounded-2xl border border-dashed border-[var(--border)] text-center space-y-2">
             <Sparkles className="w-6 h-6 text-[var(--muted)] mx-auto opacity-40" />
-            <p className="text-xs text-[var(--muted)]">No Gemini milestone updates imported yet for this trade.</p>
+            <p className="text-xs text-[var(--muted)]">No milestone targets or trailing stops recorded for this trade yet.</p>
             {isAdmin && (
               <button
                 type="button"
                 onClick={() => setShowGeminiModal(true)}
                 className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-500 to-purple-600 hover:from-rose-600 hover:to-purple-700 text-white font-semibold text-xs shadow-sm transition-all"
               >
-                Import Gemini Milestones
+                Add Milestones
               </button>
             )}
           </div>

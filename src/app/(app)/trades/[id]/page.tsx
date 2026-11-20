@@ -1,7 +1,7 @@
 import React from 'react';
 import { notFound } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { getHouseholdAppContext } from '@/lib/auth/server-auth';
+import { requireHouseholdMember } from '@/lib/auth/server-auth';
 import { TopBar } from '@/components/layout/TopBar';
 import { TradeDetailClient } from '@/components/trades/TradeDetailClient';
 import { getTradeMilestoneHistory } from '@/lib/services/gemini-milestone-service';
@@ -18,9 +18,9 @@ export const metadata = {
 
 export default async function TradeDetailPage({ params }: TradeDetailPageProps) {
   const { id } = await params;
-  const appContext = await getHouseholdAppContext();
+  const household = await requireHouseholdMember();
   const supabase = await createSupabaseServerClient();
-  const isAdmin = appContext.isAdmin;
+  const isAdmin = household.isAdmin;
 
   const [tradeRes, milestoneHistory] = await Promise.all([
     supabase
@@ -32,7 +32,7 @@ export default async function TradeDetailPage({ params }: TradeDetailPageProps) 
         stop_loss_history(*)
       `)
       .eq('id', id)
-      .eq('household_id', appContext.householdId)
+      .eq('household_id', household.householdId)
       .single(),
     getTradeMilestoneHistory(id),
   ]);

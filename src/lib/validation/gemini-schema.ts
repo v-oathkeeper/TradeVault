@@ -171,10 +171,20 @@ export function parseAndValidateGeminiJson(input: string | Record<string, unknow
       raw.current_active_trailing_sl ??
       raw.current_trailing_stop_loss ??
       raw.current_trailing_sl ??
-      raw.current_trailing_stop ??
       raw.currentTrailingStopLoss ??
+      raw.currentTrailingSl ??
+      raw.current_trailing_stop ??
+      raw.currentActiveTrailingStopLoss ??
+      raw.currentActiveTrailingSl ??
       raw.active_trailing_stop_loss ??
-      raw.active_stop_loss
+      raw.active_trailing_sl ??
+      raw.activeTrailingStopLoss ??
+      raw.activeTrailingSl ??
+      raw.active_stop_loss ??
+      raw.current_stop_loss ??
+      raw.currentStopLoss ??
+      raw.trailing_stop_loss ??
+      raw.trailing_sl
     );
 
     // Timestamp
@@ -287,11 +297,32 @@ export function parseAndValidateGeminiJson(input: string | Record<string, unknow
       } else {
         // Flat keys: `milestone1_target_price` / `milestone1_target`
         m1 = {
-          targetPrice: parseNum(raw.milestone1_target_price ?? raw.milestone1_target ?? raw.m1_target ?? raw.milestone_1_target),
-          status: normalizeStatus(raw.milestone1_status ?? raw.m1_status),
+          targetPrice: parseNum(
+            raw.milestone1_target_price ??
+            raw.milestone1_target ??
+            raw.milestone1TargetPrice ??
+            raw.milestone1Target ??
+            raw.milestone_1_target_price ??
+            raw.milestone_1_target ??
+            raw.milestone_1TargetPrice ??
+            raw.milestone_1Target ??
+            raw.m1TargetPrice ??
+            raw.m1Target ??
+            raw.m1_target
+          ),
+          status: normalizeStatus(
+            raw.milestone1_status ?? raw.milestone1Status ?? raw.milestone_1Status ?? raw.m1_status ?? raw.m1Status
+          ),
           trailingStopLoss: parseNum(
             raw.milestone1_trailing_stop_loss ??
             raw.milestone1_trailing_sl ??
+            raw.milestone1TrailingStopLoss ??
+            raw.milestone1TrailingSl ??
+            raw.milestone_1_trailing_stop_loss ??
+            raw.milestone_1TrailingStopLoss ??
+            raw.milestone_1TrailingSl ??
+            raw.m1TrailingStopLoss ??
+            raw.m1TrailingSl ??
             raw.m1_trailing_sl ??
             raw.milestone_1_trailing_sl
           ),
@@ -317,11 +348,32 @@ export function parseAndValidateGeminiJson(input: string | Record<string, unknow
         };
       } else {
         m2 = {
-          targetPrice: parseNum(raw.milestone2_target_price ?? raw.milestone2_target ?? raw.m2_target ?? raw.milestone_2_target),
-          status: normalizeStatus(raw.milestone2_status ?? raw.m2_status),
+          targetPrice: parseNum(
+            raw.milestone2_target_price ??
+            raw.milestone2_target ??
+            raw.milestone2TargetPrice ??
+            raw.milestone2Target ??
+            raw.milestone_2_target_price ??
+            raw.milestone_2_target ??
+            raw.milestone_2TargetPrice ??
+            raw.milestone_2Target ??
+            raw.m2TargetPrice ??
+            raw.m2Target ??
+            raw.m2_target
+          ),
+          status: normalizeStatus(
+            raw.milestone2_status ?? raw.milestone2Status ?? raw.milestone_2Status ?? raw.m2_status ?? raw.m2Status
+          ),
           trailingStopLoss: parseNum(
             raw.milestone2_trailing_stop_loss ??
             raw.milestone2_trailing_sl ??
+            raw.milestone2TrailingStopLoss ??
+            raw.milestone2TrailingSl ??
+            raw.milestone_2_trailing_stop_loss ??
+            raw.milestone_2TrailingStopLoss ??
+            raw.milestone_2TrailingSl ??
+            raw.m2TrailingStopLoss ??
+            raw.m2TrailingSl ??
             raw.m2_trailing_sl ??
             raw.milestone_2_trailing_sl
           ),
@@ -347,11 +399,32 @@ export function parseAndValidateGeminiJson(input: string | Record<string, unknow
         };
       } else {
         m3 = {
-          targetPrice: parseNum(raw.milestone3_target_price ?? raw.milestone3_target ?? raw.m3_target ?? raw.milestone_3_target),
-          status: normalizeStatus(raw.milestone3_status ?? raw.m3_status),
+          targetPrice: parseNum(
+            raw.milestone3_target_price ??
+            raw.milestone3_target ??
+            raw.milestone3TargetPrice ??
+            raw.milestone3Target ??
+            raw.milestone_3_target_price ??
+            raw.milestone_3_target ??
+            raw.milestone_3TargetPrice ??
+            raw.milestone_3Target ??
+            raw.m3TargetPrice ??
+            raw.m3Target ??
+            raw.m3_target
+          ),
+          status: normalizeStatus(
+            raw.milestone3_status ?? raw.milestone3Status ?? raw.milestone_3Status ?? raw.m3_status ?? raw.m3Status
+          ),
           trailingStopLoss: parseNum(
             raw.milestone3_trailing_stop_loss ??
             raw.milestone3_trailing_sl ??
+            raw.milestone3TrailingStopLoss ??
+            raw.milestone3TrailingSl ??
+            raw.milestone_3_trailing_stop_loss ??
+            raw.milestone_3TrailingStopLoss ??
+            raw.milestone_3TrailingSl ??
+            raw.m3TrailingStopLoss ??
+            raw.m3TrailingSl ??
             raw.m3_trailing_sl ??
             raw.milestone_3_trailing_sl
           ),

@@ -1,6 +1,6 @@
 import React from 'react';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { getHouseholdAppContext } from '@/lib/auth/server-auth';
+import { requireHouseholdMember } from '@/lib/auth/server-auth';
 import { calculateCapitalSummary } from '@/lib/services/capital-service';
 import { TopBar } from '@/components/layout/TopBar';
 import { DashboardClient } from '@/components/dashboard/DashboardClient';
@@ -15,12 +15,12 @@ export const metadata = {
 };
 
 export default async function DashboardPage() {
-  const appContext = await getHouseholdAppContext();
+  const household = await requireHouseholdMember();
 
   const supabase = await createSupabaseServerClient();
 
   // Run independent database fetches in a single parallel roundtrip
-  const [tradesResult, txResult] = await measureAsync('DashboardPage:parallelDataFetch', () =>
+  const [tradesResult, txResult, personsResult] = await measureAsync('DashboardPage:parallelDataFetch', () =>
     Promise.all([
       supabase
         .from('trades')
@@ -30,13 +30,19 @@ export default async function DashboardPage() {
           gross_pnl, total_charges, net_pnl, calculation_status, status, strategy_name,
           initial_stop_loss, current_stop_loss, initial_risk_rupees, realized_r_multiple
         `)
-        .eq('household_id', appContext.householdId)
+        .eq('household_id', household.householdId)
         .order('entry_at', { ascending: false }),
 
       supabase
         .from('capital_transactions')
         .select('*')
-        .eq('household_id', appContext.householdId),
+        .eq('household_id', household.householdId),
+
+      supabase
+        .from('persons')
+        .select('id, display_name, relationship_label')
+        .eq('household_id', household.householdId)
+        .eq('is_active', true),
     ])
   );
 
@@ -46,9 +52,17 @@ export default async function DashboardPage() {
   if (txResult.error) {
     throw new Error(`Failed to load dashboard capital ledger: ${txResult.error.message}`);
   }
+  if (personsResult.error) {
+    throw new Error(`Failed to load household members: ${personsResult.error.message}`);
+  }
 
   const tradesData = tradesResult.data ?? [];
   const txRows = (txResult.data as CapitalTransactionRow[] | null) ?? [];
+  const persons = (personsResult.data ?? []).map((person) => ({
+    id: person.id,
+    displayName: person.display_name,
+    relationshipLabel: person.relationship_label,
+  }));
 
   // Filter closed trades in-memory for instant capital aggregation
   const closedTrades = tradesData
@@ -60,13 +74,13 @@ export default async function DashboardPage() {
     }));
 
   const capitalSummary = calculateCapitalSummary(
-    appContext.householdId,
-    appContext.persons,
+    household.householdId,
+    persons,
     closedTrades,
     txRows
   );
 
-  const personMap = new Map(appContext.persons.map((p) => [p.id, p]));
+  const personMap = new Map(persons.map((person) => [person.id, person]));
 
   const trades: Trade[] = tradesData.map((t) => {
     const person = personMap.get(t.portfolio_owner_id);
@@ -124,7 +138,7 @@ export default async function DashboardPage() {
   return (
     <div className="flex flex-col min-h-screen">
       <TopBar title="Dashboard" />
-      <DashboardClient initialTrades={trades} capitalSummary={capitalSummary} isAdmin={appContext.isAdmin} />
+      <DashboardClient initialTrades={trades} capitalSummary={capitalSummary} isAdmin={household.isAdmin} />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { getHouseholdAppContext } from '@/lib/auth/server-auth';
+import { requireHouseholdMember } from '@/lib/auth/server-auth';
 import { TopBar } from '@/components/layout/TopBar';
 import { TradeHistoryClient } from '@/components/trades/TradeHistoryClient';
 import { getBrokerById } from '@/lib/brokers';
@@ -13,15 +13,17 @@ export const metadata = {
 };
 
 export default async function TradesPage() {
-  const appContext = await getHouseholdAppContext();
+  const household = await requireHouseholdMember();
 
   const supabase = await createSupabaseServerClient();
 
-  // Fast flat query: query scalar columns without expensive PostgREST nested joins
-  const tradesData = await measureAsync('TradesPage:fetchTrades', async () => {
-    const { data, error } = await supabase
-      .from('trades')
-      .select(`
+  // Fetch trades and owner labels together; waiting for owner labels before
+  // starting the main query added an avoidable database round trip.
+  const [tradesResult, personsResult] = await measureAsync('TradesPage:parallelDataFetch', () =>
+    Promise.all([
+      supabase
+        .from('trades')
+        .select(`
         id, household_id, portfolio_owner_id, broker_id, symbol, exchange,
         trade_type, direction, quantity, entry_price, exit_price, entry_at, exit_at,
         gross_pnl, total_charges, net_pnl, calculation_status, status, notes,
@@ -31,19 +33,32 @@ export default async function TradesPage() {
         milestone3_target, milestone3_status, milestone3_trailing_sl,
         current_trailing_sl, last_reached_milestone, milestones_updated_at
       `)
-      .eq('household_id', appContext.householdId)
-      .order('entry_at', { ascending: false });
+        .eq('household_id', household.householdId)
+        .order('entry_at', { ascending: false }),
+      supabase
+        .from('persons')
+        .select('id, display_name, relationship_label')
+        .eq('household_id', household.householdId)
+        .eq('is_active', true),
+    ])
+  );
 
-    if (error) {
-      throw new Error(`Failed to load trades: ${error.message}`);
-    }
-    return data || [];
-  });
+  if (tradesResult.error) {
+    throw new Error(`Failed to load trades: ${tradesResult.error.message}`);
+  }
+  if (personsResult.error) {
+    throw new Error(`Failed to load household members: ${personsResult.error.message}`);
+  }
 
-  // Fast in-memory mapping from cached appContext persons & broker registry
-  const personMap = new Map(appContext.persons.map((p) => [p.id, p]));
+  const personMap = new Map(
+    (personsResult.data ?? []).map((person) => [person.id, {
+      id: person.id,
+      displayName: person.display_name,
+      relationshipLabel: person.relationship_label,
+    }])
+  );
 
-  const trades: Trade[] = tradesData.map((t) => {
+  const trades: Trade[] = (tradesResult.data ?? []).map((t) => {
     const person = personMap.get(t.portfolio_owner_id);
     const broker = getBrokerById(t.broker_id);
 
